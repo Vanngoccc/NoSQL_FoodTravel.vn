@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TravelVibe - Nền tảng đánh giá và khám phá địa điểm du lịch</title>
+  <title>FoodTravel.vn - Nền tảng mạng xã hội ẩm thực & du lịch Việt Nam</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- FontAwesome Icons -->
@@ -11,317 +11,551 @@
   <!-- Google Fonts: Plus Jakarta Sans -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <!-- Leaflet CSS for Map -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <style>
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-    #mapViewContainer { height: 480px; z-index: 10; }
+    #mapViewContainer { height: 500px; z-index: 10; border-radius: 1.5rem; }
+    .hero-warm-bg { background-color: #FFF9F6; }
+    .brand-orange { color: #FF5422; }
+    .bg-brand-orange { background-color: #FF5422; }
+    .bg-brand-orange:hover { background-color: #E84615; }
+    .border-brand-orange { border-color: #FF5422; }
   </style>
 </head>
-<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+<body class="bg-[#FBFBFC] text-[#1E293B] min-h-screen flex flex-col antialiased">
 
-  <!-- ==================== THANH HEADER ĐIỀU HƯỚNG ==================== -->
-  <header class="bg-white/95 backdrop-blur-md sticky top-0 z-40 border-b border-slate-100 shadow-xs">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 h-18 flex items-center justify-between gap-4">
+  <!-- ==================== HEADER (CHUẨN FIGMA FOODTRAVEL.VN) ==================== -->
+  <header class="bg-white sticky top-0 z-40 border-b border-slate-100 shadow-xs">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between gap-4">
       
-      <!-- Brand Logo -->
-      <div class="flex items-center space-x-3 cursor-pointer" onclick="resetFilters()">
-        <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-md shadow-emerald-200">
-          <i class="fa-solid fa-compass text-lg"></i>
-        </div>
-        <div>
-          <span class="text-xl font-extrabold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">TravelVibe</span>
-          <span class="block text-[10px] text-slate-400 font-semibold tracking-wider">Cộng đồng du lịch &amp; ẩm thực</span>
+      <!-- Brand Logo Figma: FoodTravel.vn -->
+      <div class="flex items-center space-x-3 cursor-pointer shrink-0" onclick="resetFilters()">
+        <span class="text-2xl font-black tracking-tight text-[#FF5422]">
+          FoodTravel<span class="text-slate-900">.vn</span>
+        </span>
+      </div>
+
+      <!-- Centered Pill Search Bar (Chuẩn Figma) -->
+      <div class="hidden md:flex flex-1 max-w-md mx-6">
+        <div class="w-full relative flex items-center bg-[#F3F4F6] hover:bg-[#EAEBED] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#FF5422]/20 focus-within:border-[#FF5422] border border-transparent rounded-full px-4 py-2.5 transition-all">
+          <i class="fa-solid fa-magnifying-glass text-slate-400 text-sm mr-3"></i>
+          <input type="text" id="searchInput" placeholder="Tìm kiếm món ăn, địa điểm..." 
+                 class="w-full text-xs sm:text-sm text-slate-800 placeholder-slate-400 outline-none bg-transparent font-medium"
+                 onkeypress="if(event.key === 'Enter') handleSearch()">
+          <button onclick="handleSearch()" class="text-xs font-bold text-[#FF5422] hover:text-[#E84615] px-2 py-0.5 rounded-full transition-colors cursor-pointer">
+            Tìm
+          </button>
         </div>
       </div>
 
-      <!-- Quick Nav Buttons -->
-      <div class="hidden md:flex items-center space-x-1 bg-slate-100/80 p-1.5 rounded-2xl">
-        <button onclick="switchView('explore')" id="btnNavExplore" class="px-4 py-2 rounded-xl text-xs font-bold transition-all bg-white text-emerald-600 shadow-xs flex items-center space-x-1.5 cursor-pointer">
-          <i class="fa-solid fa-compass"></i>
-          <span>Khám phá</span>
-        </button>
-        <button onclick="switchView('map')" id="btnNavMap" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 transition-all flex items-center space-x-1.5 cursor-pointer">
-          <i class="fa-solid fa-map-location-dot"></i>
-          <span>Bản đồ du lịch</span>
-        </button>
-        <button onclick="switchView('stats')" id="btnNavStats" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 transition-all flex items-center space-x-1.5 cursor-pointer">
-          <i class="fa-solid fa-chart-pie"></i>
-          <span>Thống kê đánh giá</span>
-        </button>
-      </div>
+      <!-- Quick Nav Buttons & Auth Actions -->
+      <div class="flex items-center space-x-2 sm:space-x-3">
+        <!-- Tab chuyển đổi -->
+        <nav class="hidden lg:flex items-center space-x-1 bg-slate-100 p-1 rounded-2xl mr-2">
+          <button onclick="switchView('explore')" id="btnNavExplore" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all bg-white text-[#FF5422] shadow-xs flex items-center space-x-1 cursor-pointer">
+            <i class="fa-solid fa-compass"></i>
+            <span>Khám phá</span>
+          </button>
+          <button onclick="switchView('map')" id="btnNavMap" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 transition-all flex items-center space-x-1 cursor-pointer">
+            <i class="fa-solid fa-map-location-dot"></i>
+            <span>Bản đồ</span>
+          </button>
+          <button onclick="switchView('stats')" id="btnNavStats" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 transition-all flex items-center space-x-1 cursor-pointer">
+            <i class="fa-solid fa-chart-pie"></i>
+            <span>Thống kê</span>
+          </button>
+        </nav>
 
-      <!-- Right Actions: Thêm địa điểm + Đăng nhập/Đăng ký -->
-      <div class="flex items-center space-x-2.5">
-        <button onclick="openNewLocationModal()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all shadow-sm shadow-emerald-200 flex items-center space-x-1.5 cursor-pointer">
+        <!-- Nút Thêm bài viết / địa điểm -->
+        <button onclick="openNewLocationModal()" class="hidden sm:flex px-3.5 py-2 rounded-full text-xs font-bold bg-[#FF5422]/10 text-[#FF5422] hover:bg-[#FF5422] hover:text-white transition-all items-center space-x-1.5 cursor-pointer">
           <i class="fa-solid fa-plus text-xs"></i>
-          <span class="hidden sm:inline">Thêm địa điểm</span>
+          <span>Chia sẻ</span>
         </button>
-        
-        <!-- Khối Đăng nhập / Tài khoản người dùng -->
-        <div id="userAccountSection" class="flex items-center space-x-1.5">
-          <button onclick="openAuthModal('login')" class="px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer">
+
+        <!-- Đăng nhập / Đăng ký (Chuẩn Figma) -->
+        <div id="userAccountSection" class="flex items-center space-x-2">
+          <button onclick="openAuthModal('login')" class="px-3 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 transition-colors cursor-pointer">
             Đăng nhập
           </button>
-          <button onclick="openAuthModal('register')" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white transition-all shadow-xs cursor-pointer">
+          <button onclick="openAuthModal('register')" class="px-4 py-2 rounded-full text-xs font-bold bg-[#FF5422] hover:bg-[#E84615] text-white transition-all shadow-sm shadow-[#FF5422]/20 cursor-pointer">
             Đăng ký
           </button>
         </div>
       </div>
 
     </div>
+
+    <!-- Mobile Search Bar (dưới header khi trên màn hình nhỏ) -->
+    <div class="md:hidden px-4 pb-3">
+      <div class="w-full relative flex items-center bg-[#F3F4F6] rounded-full px-4 py-2 border border-slate-200">
+        <i class="fa-solid fa-magnifying-glass text-slate-400 text-sm mr-2.5"></i>
+        <input type="text" id="searchInputMobile" placeholder="Tìm kiếm món ăn, địa điểm..." 
+               class="w-full text-xs text-slate-800 placeholder-slate-400 outline-none bg-transparent"
+               onkeypress="if(event.key === 'Enter') handleSearchMobile()">
+        <button onclick="handleSearchMobile()" class="text-xs font-bold text-[#FF5422] px-1">Tìm</button>
+      </div>
+    </div>
   </header>
 
-  <!-- ==================== BANNER TÌM KIẾM CHÍNH (CHỈ HIỂN THỊ Ở TAB KHÁM PHÁ) ==================== -->
-  <section id="heroBannerSection" class="relative bg-gradient-to-br from-emerald-900 via-teal-900 to-slate-900 text-white py-12 px-4 sm:px-6 overflow-hidden">
-    <!-- Background Glow Circles -->
-    <div class="absolute -top-24 -right-24 w-96 h-96 bg-emerald-500/20 rounded-full blur-3xl pointer-events-none"></div>
-    <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-teal-500/20 rounded-full blur-3xl pointer-events-none"></div>
+  <!-- ==================== HERO SECTION (CHUẨN 100% COVER FIGMA) ==================== -->
+  <section id="heroBannerSection" class="hero-warm-bg border-b border-[#FBECE6] py-10 sm:py-16 px-4 sm:px-6 relative overflow-hidden">
+    <div class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+      
+      <!-- Cột trái: Văn bản & Nút bấm theo Figma -->
+      <div class="lg:col-span-6 space-y-6">
+        <h1 class="text-3xl sm:text-5xl lg:text-[54px] font-black tracking-tight leading-[1.15] text-slate-900">
+          Khám phá <span class="text-[#FF5422]">ẩm thực</span><br/>
+          và <span class="text-[#FF5422]">du lịch</span> Việt Nam
+        </h1>
 
-    <div class="max-w-5xl mx-auto relative z-10 text-center space-y-4">
-      <div class="inline-flex items-center space-x-2 bg-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/15 text-xs font-medium text-emerald-300">
-        <i class="fa-solid fa-sparkles"></i>
-        <span>Nền tảng chia sẻ và trải nghiệm du lịch Việt Nam</span>
+        <p class="text-slate-600 text-sm sm:text-base leading-relaxed max-w-xl font-normal">
+          Chia sẻ những trải nghiệm ẩm thực tuyệt vời và hành trình khám phá những điểm đến đẹp nhất tại Việt Nam cùng cộng đồng yêu thích du lịch.
+        </p>
+
+        <!-- Nhóm nút bấm chính -->
+        <div class="flex flex-wrap items-center gap-3 pt-2">
+          <button onclick="scrollToContent()" class="px-6 py-3.5 rounded-full text-sm font-bold bg-[#FF5422] hover:bg-[#E84615] text-white shadow-md shadow-[#FF5422]/25 flex items-center space-x-2 transition-all cursor-pointer">
+            <span>Bắt đầu khám phá</span>
+            <i class="fa-solid fa-arrow-right text-xs"></i>
+          </button>
+          
+          <button onclick="openNewLocationModal()" class="px-5 py-3.5 rounded-full text-sm font-bold bg-white text-[#FF5422] border border-[#FFD4C4] hover:bg-[#FFF3ED] transition-all flex items-center space-x-2 cursor-pointer shadow-xs">
+            <i class="fa-solid fa-camera text-sm"></i>
+            <span>Chia sẻ story</span>
+          </button>
+        </div>
+
+        <!-- Bộ chỉ số thống kê (Stats row) -->
+        <div class="pt-6 border-t border-[#F5E6DF] flex items-center space-x-8 sm:space-x-12">
+          <div>
+            <div class="text-2xl sm:text-3xl font-black text-slate-900">50K+</div>
+            <div class="text-xs text-slate-500 font-medium">Thành viên</div>
+          </div>
+          <div>
+            <div class="text-2xl sm:text-3xl font-black text-slate-900">10K+</div>
+            <div class="text-xs text-slate-500 font-medium">Bài viết</div>
+          </div>
+          <div>
+            <div class="text-2xl sm:text-3xl font-black text-slate-900">100+</div>
+            <div class="text-xs text-slate-500 font-medium">Thành phố</div>
+          </div>
+        </div>
       </div>
 
-      <h1 class="text-3xl sm:text-5xl font-extrabold tracking-tight leading-tight">
-        Khám phá và đánh giá địa điểm <br class="hidden sm:inline"/>
-        <span class="bg-gradient-to-r from-emerald-300 to-teal-200 bg-clip-text text-transparent leading-relaxed inline-block pt-1">du lịch &amp; ẩm thực Việt Nam</span>
-      </h1>
-      
-      <p class="text-slate-300 text-xs sm:text-sm max-w-2xl mx-auto font-normal">
-        Hệ thống tích hợp tìm kiếm toàn văn, định vị không gian địa lý và phân tích dữ liệu đánh giá thời gian thực.
-      </p>
+      <!-- Cột phải: Mosaic 4 ảnh nghệ thuật chuẩn Figma -->
+      <div class="lg:col-span-6 relative">
+        <!-- Vòng tròn trang trí Gradient mờ phía sau -->
+        <div class="absolute -top-10 -right-6 w-40 h-40 bg-gradient-to-tr from-amber-400 to-[#FF5422] rounded-full opacity-60 blur-xl pointer-events-none"></div>
+        <div class="absolute -bottom-8 -left-8 w-36 h-36 bg-gradient-to-br from-[#FF5422] to-rose-400 rounded-full opacity-40 blur-xl pointer-events-none"></div>
 
-      <!-- Search Input Box -->
-      <div class="max-w-3xl mx-auto mt-6 bg-white p-2 rounded-2xl shadow-xl flex flex-col sm:flex-row items-center gap-2 border border-slate-100">
-        <div class="flex-1 flex items-center px-3 w-full">
-          <i class="fa-solid fa-magnifying-glass text-slate-400 mr-2 text-sm"></i>
-          <input type="text" id="searchInput" placeholder="Tìm kiếm tên địa điểm, danh lam thắng cảnh..." 
-                 class="w-full py-2 text-sm text-slate-800 placeholder-slate-400 outline-none bg-transparent"
-                 onkeypress="if(event.key === 'Enter') handleSearch()">
+        <div class="grid grid-cols-2 gap-4 relative z-10">
+          <!-- Ảnh 1: Tô Phở Việt Nam (Like 234) -->
+          <div class="relative group rounded-3xl overflow-hidden shadow-lg aspect-4/3 bg-slate-100">
+            <img src="https://images.unsplash.com/photo-1582878826629-29b7ad1cdc43?w=800&auto=format&fit=crop&q=80" alt="Phở bò truyền thống" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+            <div class="absolute bottom-3 left-3 bg-black/55 backdrop-blur-md text-white text-xs font-bold px-3 py-1 rounded-full flex items-center space-x-1.5 shadow-sm">
+              <i class="fa-solid fa-heart text-rose-400 text-xs"></i>
+              <span>234</span>
+            </div>
+          </div>
+
+          <!-- Ảnh 2: Vịnh Hạ Long (Vị trí Hạ Long) -->
+          <div class="relative group rounded-3xl overflow-hidden shadow-lg aspect-4/3 bg-slate-100">
+            <img src="https://images.unsplash.com/photo-1528127269322-539801943592?w=800&auto=format&fit=crop&q=80" alt="Vịnh Hạ Long" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+            <div class="absolute bottom-3 left-3 bg-black/55 backdrop-blur-md text-white text-xs font-bold px-3 py-1 rounded-full flex items-center space-x-1.5 shadow-sm">
+              <i class="fa-solid fa-location-dot text-[#FF5422] text-xs"></i>
+              <span>Hạ Long</span>
+            </div>
+          </div>
+
+          <!-- Ảnh 3: Phố cổ Hội An (Vị trí Hội An) -->
+          <div class="relative group rounded-3xl overflow-hidden shadow-lg aspect-4/3 bg-slate-100">
+            <img src="https://images.unsplash.com/photo-1559592413-7cec4d0cae2b?w=800&auto=format&fit=crop&q=80" alt="Phố cổ Hội An" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+            <div class="absolute bottom-3 left-3 bg-black/55 backdrop-blur-md text-white text-xs font-bold px-3 py-1 rounded-full flex items-center space-x-1.5 shadow-sm">
+              <i class="fa-solid fa-location-dot text-amber-400 text-xs"></i>
+              <span>Hội An</span>
+            </div>
+          </div>
+
+          <!-- Ảnh 4: Ẩm thực bún bò / đặc sản (Like 567) -->
+          <div class="relative group rounded-3xl overflow-hidden shadow-lg aspect-4/3 bg-slate-100">
+            <img src="https://images.unsplash.com/photo-1576577445504-6af96477db52?w=800&auto=format&fit=crop&q=80" alt="Ẩm thực đặc sản" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+            <div class="absolute bottom-3 left-3 bg-black/55 backdrop-blur-md text-white text-xs font-bold px-3 py-1 rounded-full flex items-center space-x-1.5 shadow-sm">
+              <i class="fa-solid fa-heart text-rose-400 text-xs"></i>
+              <span>567</span>
+            </div>
+          </div>
         </div>
 
-        <div class="h-6 w-[1px] bg-slate-200 hidden sm:block"></div>
-
-        <!-- City Select -->
-        <div class="flex items-center px-2 w-full sm:w-auto">
-          <i class="fa-solid fa-location-dot text-emerald-600 mr-1.5 text-xs"></i>
-          <select id="filterCity" onchange="applyFilters()" class="text-xs font-bold text-slate-700 bg-transparent outline-none cursor-pointer py-2">
-            <option value="ALL">Tất cả thành phố</option>
-            <option value="Đà Nẵng">Đà Nẵng</option>
-            <option value="Hà Nội">Hà Nội</option>
-            <option value="TP.HCM">TP. Hồ Chí Minh</option>
-          </select>
-        </div>
-
-        <!-- Search Button -->
-        <button onclick="handleSearch()" class="w-full sm:w-auto px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center space-x-1.5 cursor-pointer">
-          <i class="fa-solid fa-search"></i>
-          <span>Tìm kiếm</span>
-        </button>
       </div>
 
     </div>
   </section>
 
   <!-- ==================== KHÔNG GIAN NỘI DUNG CHÍNH ==================== -->
-  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6" id="mainContentContainer">
 
-    <!-- BỘ LỌC DANH MỤC (ĐÃ XÓA ICON THEO YÊU CẦU) -->
-    <div id="categoryFilterBar" class="flex items-center justify-between gap-3 overflow-x-auto no-scrollbar py-1">
-      <div class="flex items-center space-x-2 shrink-0" id="categoryChipsContainer">
-        <button onclick="filterCategory('ALL')" class="category-chip active px-4 py-2 rounded-full text-xs font-bold bg-emerald-600 text-white shadow-xs">Tất cả</button>
-        <button onclick="filterCategory('Landmark')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100">Địa danh</button>
-        <button onclick="filterCategory('Beach')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100">Bãi biển</button>
-        <button onclick="filterCategory('Museum')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100">Bảo tàng</button>
-        <button onclick="filterCategory('Market')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100">Chợ &amp; Mua sắm</button>
-        <button onclick="filterCategory('Pagoda')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100">Đền chùa</button>
-        <button onclick="filterCategory('Attraction')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100">Vui chơi giải trí</button>
-        <button onclick="filterCategory('Park')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100">Công viên</button>
-      </div>
+    <!-- ==================== VIEW 1: BẢNG TIN KHÁM PHÁ (CHUẨN BỐ CỤC 2 CỘT FIGMA) ==================== -->
+    <div id="viewExplore" class="space-y-6">
+      
+      <!-- Bố cục 2 Cột: Cột chính Feed (8 cột) & Cột phải Widget (4 cột) -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        <!-- CỘT CHÍNH: KHÁM PHÁ MỚI NHẤT & FEED BÀI VIẾT -->
+        <div class="lg:col-span-8 space-y-6">
+          
+          <!-- Tiêu đề Section (Chuẩn Figma) -->
+          <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-3 border-b border-slate-100 pb-4">
+            <div>
+              <h2 class="text-2xl font-black text-slate-900 tracking-tight">Khám phá mới nhất</h2>
+              <p class="text-xs sm:text-sm text-slate-500 mt-1">Những trải nghiệm ẩm thực và du lịch mới nhất từ cộng đồng</p>
+            </div>
 
-      <!-- Quick Geolocation Button (Tìm gần tôi) -->
-      <button onclick="getUserCurrentLocationAndFetchNearby()" class="shrink-0 px-3.5 py-2 rounded-full text-xs font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition-all flex items-center space-x-1.5 shadow-2xs cursor-pointer">
-        <i class="fa-solid fa-crosshairs text-emerald-600"></i>
-        <span>Tìm gần vị trí của tôi</span>
-      </button>
-    </div>
+            <!-- Sắp xếp & Chọn Thành phố -->
+            <div class="flex items-center space-x-2 text-xs shrink-0">
+              <select id="filterCity" onchange="applyFilters()" class="bg-white border border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-700 outline-none cursor-pointer hover:border-slate-300">
+                <option value="ALL">Tất cả thành phố</option>
+                <option value="Đà Nẵng">Đà Nẵng</option>
+                <option value="Hà Nội">Hà Nội</option>
+                <option value="TP.HCM">TP. Hồ Chí Minh</option>
+              </select>
 
-    <!-- ==================== VIEW 1: DANH SÁCH ĐỊA ĐIỂM ==================== -->
-    <div id="viewExplore" class="space-y-4">
-      <div class="flex items-center justify-between">
-        <div>
-          <h2 class="text-lg font-bold text-slate-800 flex items-center space-x-2">
-            <span>Danh sách địa điểm nổi bật</span>
-            <span id="locationsCountLabel" class="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">100 địa điểm</span>
-          </h2>
-          <p class="text-xs text-slate-500">Khám phá các điểm đến được yêu thích cùng đánh giá thực tế từ cộng đồng du lịch</p>
+              <select id="sortBy" onchange="applyFilters()" class="bg-white border border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-700 outline-none cursor-pointer hover:border-slate-300">
+                <option value="rating">Đánh giá cao nhất</option>
+                <option value="reviews">Nhiều đánh giá nhất</option>
+                <option value="name">Theo thứ tự A-Z</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Bộ lọc danh mục dạng Pill (Không icon theo yêu cầu người dùng) -->
+          <div class="flex items-center space-x-2 overflow-x-auto no-scrollbar py-1" id="categoryChipsContainer">
+            <button onclick="filterCategory('ALL')" class="category-chip active px-4 py-2 rounded-full text-xs font-bold bg-[#FF5422] text-white shadow-xs shrink-0 cursor-pointer">Tất cả</button>
+            <button onclick="filterCategory('Landmark')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 shrink-0 cursor-pointer">Địa danh</button>
+            <button onclick="filterCategory('Beach')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 shrink-0 cursor-pointer">Bãi biển</button>
+            <button onclick="filterCategory('Museum')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 shrink-0 cursor-pointer">Bảo tàng</button>
+            <button onclick="filterCategory('Market')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 shrink-0 cursor-pointer">Ẩm thực & Chợ</button>
+            <button onclick="filterCategory('Pagoda')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 shrink-0 cursor-pointer">Đền chùa</button>
+            <button onclick="filterCategory('Attraction')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 shrink-0 cursor-pointer">Vui chơi giải trí</button>
+            <button onclick="filterCategory('Park')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 shrink-0 cursor-pointer">Công viên</button>
+          </div>
+
+          <!-- Thanh Đăng Story / Review Nhanh (Social Composer) -->
+          <div class="bg-white rounded-3xl p-4 border border-slate-200/80 shadow-xs flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-full bg-[#FF5422]/10 text-[#FF5422] flex items-center justify-center font-bold text-sm shrink-0">
+              <i class="fa-solid fa-user"></i>
+            </div>
+            <button onclick="openNewLocationModal()" class="flex-1 text-left px-4 py-2.5 rounded-full bg-slate-50 hover:bg-slate-100 text-xs text-slate-500 font-medium transition-colors cursor-pointer border border-slate-100">
+              Bạn vừa khám phá món ngon hay địa điểm nào? Chia sẻ bài viết ngay...
+            </button>
+            <button onclick="openNewLocationModal()" class="px-3.5 py-2 rounded-full bg-[#FF5422] hover:bg-[#E84615] text-white text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer flex items-center space-x-1.5">
+              <i class="fa-solid fa-camera"></i>
+              <span class="hidden sm:inline">Đăng bài</span>
+            </button>
+          </div>
+
+          <!-- Lưới Cards Địa điểm / Social Post Cards (12 mục / trang) -->
+          <div id="locationsGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <!-- Rendered by JS -->
+          </div>
+
+          <!-- THANH PHÂN TRANG (PAGINATION) -->
+          <div id="paginationContainer" class="pt-6 pb-4 flex items-center justify-center space-x-2">
+            <!-- Rendered by JS -->
+          </div>
+
         </div>
 
-        <!-- Sắp xếp -->
-        <div class="flex items-center space-x-2 text-xs">
-          <span class="text-slate-400 font-medium">Sắp xếp:</span>
-          <select id="sortBy" onchange="applyFilters()" class="bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-700 outline-none cursor-pointer">
-            <option value="rating">Đánh giá cao nhất</option>
-            <option value="reviews">Nhiều đánh giá nhất</option>
-            <option value="name">Theo thứ tự A-Z</option>
-          </select>
-        </div>
-      </div>
+        <!-- CỘT PHẢI: WIDGETS THEO FIGMA (XU HƯỚNG, GỢI Ý, BẢN ĐỒ NHANH) -->
+        <div class="lg:col-span-4 space-y-6">
+          
+          <!-- Widget 1: XU HƯỚNG (Chuẩn Figma `#PhoBo`, 2.3K bài viết ↗) -->
+          <div class="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 class="text-base font-extrabold text-slate-900 flex items-center space-x-2">
+                <i class="fa-solid fa-arrow-trend-up text-[#FF5422]"></i>
+                <span>Xu hướng</span>
+              </h3>
+              <span class="text-[11px] font-semibold text-slate-400">Hôm nay</span>
+            </div>
 
-      <!-- Lưới Cards Địa điểm (Phân trang 12 thẻ/trang) -->
-      <div id="locationsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-        <!-- Rendered by JS -->
-      </div>
+            <div class="space-y-3">
+              <div onclick="quickFilterKeyword('Phở')" class="flex items-center justify-between p-2.5 rounded-2xl hover:bg-slate-50 transition-all cursor-pointer group">
+                <div>
+                  <span class="text-sm font-bold text-slate-800 group-hover:text-[#FF5422] transition-colors">#PhoBo</span>
+                  <p class="text-[11px] text-slate-400">2.3K bài viết</p>
+                </div>
+                <i class="fa-solid fa-arrow-up-right-from-square text-xs text-slate-300 group-hover:text-[#FF5422] transition-colors"></i>
+              </div>
 
-      <!-- THANH ĐIỀU HƯỚNG PHÂN TRANG (PAGINATION) -->
-      <div id="paginationContainer" class="pt-6 pb-2 flex items-center justify-center space-x-2">
-        <!-- Rendered by JS -->
-      </div>
-    </div>
+              <div onclick="quickFilterKeyword('Hội An')" class="flex items-center justify-between p-2.5 rounded-2xl hover:bg-slate-50 transition-all cursor-pointer group">
+                <div>
+                  <span class="text-sm font-bold text-slate-800 group-hover:text-[#FF5422] transition-colors">#HoiAnNight</span>
+                  <p class="text-[11px] text-slate-400">1.8K bài viết</p>
+                </div>
+                <i class="fa-solid fa-arrow-up-right-from-square text-xs text-slate-300 group-hover:text-[#FF5422] transition-colors"></i>
+              </div>
 
-    <!-- ==================== VIEW 2: BẢN ĐỒ VIỆT NAM (2DSPHERE) ==================== -->
-    <div id="viewMap" class="hidden space-y-4">
-      <div class="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <h3 class="text-base font-bold text-slate-800 flex items-center space-x-2">
-              <i class="fa-solid fa-map-location-dot text-emerald-600"></i>
-              <span>Bản đồ trực quan hóa các địa điểm tại Việt Nam</span>
+              <div onclick="quickFilterKeyword('Cà phê')" class="flex items-center justify-between p-2.5 rounded-2xl hover:bg-slate-50 transition-all cursor-pointer group">
+                <div>
+                  <span class="text-sm font-bold text-slate-800 group-hover:text-[#FF5422] transition-colors">#CafeSaiGon</span>
+                  <p class="text-[11px] text-slate-400">1.5K bài viết</p>
+                </div>
+                <i class="fa-solid fa-arrow-up-right-from-square text-xs text-slate-300 group-hover:text-[#FF5422] transition-colors"></i>
+              </div>
+
+              <div onclick="quickFilterKeyword('Bánh mì')" class="flex items-center justify-between p-2.5 rounded-2xl hover:bg-slate-50 transition-all cursor-pointer group">
+                <div>
+                  <span class="text-sm font-bold text-slate-800 group-hover:text-[#FF5422] transition-colors">#BanhMiDaNang</span>
+                  <p class="text-[11px] text-slate-400">1.2K bài viết</p>
+                </div>
+                <i class="fa-solid fa-arrow-up-right-from-square text-xs text-slate-300 group-hover:text-[#FF5422] transition-colors"></i>
+              </div>
+
+              <div onclick="quickFilterKeyword('Hạ Long')" class="flex items-center justify-between p-2.5 rounded-2xl hover:bg-slate-50 transition-all cursor-pointer group">
+                <div>
+                  <span class="text-sm font-bold text-slate-800 group-hover:text-[#FF5422] transition-colors">#HaLongBay</span>
+                  <p class="text-[11px] text-slate-400">980 bài viết</p>
+                </div>
+                <i class="fa-solid fa-arrow-up-right-from-square text-xs text-slate-300 group-hover:text-[#FF5422] transition-colors"></i>
+              </div>
+            </div>
+          </div>
+
+          <!-- Widget 2: TÌM GẦN TÔI (GPS TỌA ĐỘ THỰC 2DSPHERE) -->
+          <div class="bg-gradient-to-br from-[#FFF9F6] to-white rounded-3xl p-6 border border-[#FBECE6] shadow-xs space-y-4">
+            <div class="flex items-center space-x-2 text-slate-900">
+              <i class="fa-solid fa-location-crosshairs text-[#FF5422] text-lg"></i>
+              <h3 class="text-base font-extrabold">Khám phá quanh đây</h3>
+            </div>
+            <p class="text-xs text-slate-600 leading-relaxed">
+              Tìm các quán ăn ngon và điểm du lịch gần bạn nhất dựa trên tọa độ vị trí thực tế của thiết bị.
+            </p>
+            <button onclick="getUserCurrentLocationAndFetchNearby()" class="w-full py-3 rounded-2xl text-xs font-bold bg-[#FF5422] hover:bg-[#E84615] text-white transition-all shadow-sm shadow-[#FF5422]/20 flex items-center justify-center space-x-2 cursor-pointer">
+              <i class="fa-solid fa-crosshairs"></i>
+              <span>Tìm địa điểm gần vị trí của tôi</span>
+            </button>
+          </div>
+
+          <!-- Widget 3: TOP ĐỊA ĐIỂM NỔI BẬT NHẤT (AGGREGATION THỜI GIAN THỰC) -->
+          <div class="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
+            <h3 class="text-base font-extrabold text-slate-900 flex items-center space-x-2">
+              <i class="fa-solid fa-crown text-amber-500"></i>
+              <span>Top điểm đến yêu thích</span>
             </h3>
-            <p class="text-xs text-slate-500">Tọa độ được ánh xạ chính xác trên nền bản đồ Việt Nam, hỗ trợ tìm kiếm theo khoảng cách thực tế.</p>
+
+            <div id="sidebarTopRatedContainer" class="space-y-3">
+              <div class="text-xs text-slate-400 text-center py-2">Đang tải dữ liệu...</div>
+            </div>
           </div>
 
-          <div class="flex items-center space-x-2">
-            <button onclick="focusCityMap('Đà Nẵng')" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 rounded-xl text-xs font-semibold text-slate-700 transition-all cursor-pointer">Đà Nẵng</button>
-            <button onclick="focusCityMap('Hà Nội')" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 rounded-xl text-xs font-semibold text-slate-700 transition-all cursor-pointer">Hà Nội</button>
-            <button onclick="focusCityMap('TP.HCM')" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 rounded-xl text-xs font-semibold text-slate-700 transition-all cursor-pointer">TP.HCM</button>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- ==================== VIEW 2: BẢN ĐỒ VIỆT NAM (TỌA ĐỘ THỰC) ==================== -->
+    <div id="viewMap" class="hidden space-y-4">
+      <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 class="text-lg font-black text-slate-900 flex items-center space-x-2">
+              <i class="fa-solid fa-map-location-dot text-[#FF5422]"></i>
+              <span>Bản đồ du lịch & ẩm thực Việt Nam</span>
+            </h3>
+            <p class="text-xs text-slate-500 mt-1">Toàn bộ 100 địa điểm được định vị chính xác theo tọa độ địa lý thực tế tại Việt Nam.</p>
+          </div>
+
+          <!-- Nút chọn nhanh vùng miền / thành phố -->
+          <div class="flex flex-wrap items-center gap-1.5">
+            <button onclick="focusCityMap('ALL')" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-bold text-slate-700 transition-all cursor-pointer">Toàn quốc</button>
+            <button onclick="focusCityMap('Hà Nội')" class="px-3 py-1.5 bg-slate-100 hover:bg-[#FF5422]/10 hover:text-[#FF5422] rounded-xl text-xs font-bold text-slate-700 transition-all cursor-pointer">Hà Nội</button>
+            <button onclick="focusCityMap('Đà Nẵng')" class="px-3 py-1.5 bg-slate-100 hover:bg-[#FF5422]/10 hover:text-[#FF5422] rounded-xl text-xs font-bold text-slate-700 transition-all cursor-pointer">Đà Nẵng</button>
+            <button onclick="focusCityMap('TP.HCM')" class="px-3 py-1.5 bg-slate-100 hover:bg-[#FF5422]/10 hover:text-[#FF5422] rounded-xl text-xs font-bold text-slate-700 transition-all cursor-pointer">TP. Hồ Chí Minh</button>
           </div>
         </div>
 
-        <!-- Leaflet Map Container -->
-        <div id="mapViewContainer" class="rounded-2xl border border-slate-200 overflow-hidden shadow-inner w-full"></div>
+        <div id="mapViewContainer" class="w-full shadow-inner border border-slate-100"></div>
 
-        <div class="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between text-xs text-slate-600">
-          <span class="flex items-center space-x-2">
-            <i class="fa-solid fa-circle-info text-emerald-600"></i>
-            <span>Bấm vào bất kỳ điểm đánh dấu (marker) trên bản đồ để xem tên và mở đánh giá chi tiết.</span>
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-2 text-xs text-slate-500">
+          <span class="flex items-center space-x-1">
+            <i class="fa-solid fa-info-circle text-[#FF5422]"></i>
+            <span>Nhấp vào từng điểm ghim để xem chi tiết thông tin, hình ảnh và đánh giá</span>
           </span>
-          <span class="text-[11px] font-semibold text-emerald-700">100 điểm dữ liệu chuẩn</span>
+          <span class="font-bold text-slate-700" id="mapPointsCountLabel">100 điểm ghim</span>
         </div>
       </div>
     </div>
 
-    <!-- ==================== VIEW 3: BẢNG THỐNG KÊ ĐÁNH GIÁ ==================== -->
+    <!-- ==================== VIEW 3: THỐNG KÊ ĐÁNH GIÁ (COMMUNITY ANALYTICS) ==================== -->
     <div id="viewStats" class="hidden space-y-6">
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-5" id="statsCardsContainer">
-        <!-- Rendered by JS -->
-      </div>
-
-      <!-- Top địa điểm đánh giá cao nhất -->
-      <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-4">
+      <div class="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-sm space-y-6">
         <div>
-          <h3 class="text-base font-bold text-slate-800 flex items-center space-x-2">
-            <i class="fa-solid fa-trophy text-amber-500"></i>
-            <span>Top địa điểm được đánh giá cao nhất theo từng thành phố</span>
+          <h3 class="text-xl font-black text-slate-900 flex items-center space-x-2">
+            <i class="fa-solid fa-chart-pie text-[#FF5422]"></i>
+            <span>Thống kê cộng đồng du lịch & ẩm thực</span>
           </h3>
-          <p class="text-xs text-slate-500">Bảng xếp hạng tổng hợp dựa trên số sao trung bình và số lượng phản hồi từ du khách.</p>
+          <p class="text-xs text-slate-500 mt-1">Phân tích dữ liệu thời gian thực từ cơ sở dữ liệu</p>
         </div>
 
-        <div id="topRatedTableContainer" class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <!-- Rendered by JS -->
+        <!-- 3 Thẻ thống kê tổng quan -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="p-5 rounded-2xl bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-100">
+            <div class="text-xs font-bold text-orange-800">Tổng số địa điểm</div>
+            <div class="text-3xl font-black text-[#FF5422] mt-1" id="statTotalLocations">100</div>
+            <div class="text-[11px] text-orange-600/80 mt-1">Đà Nẵng, Hà Nội, TP.HCM</div>
+          </div>
+          <div class="p-5 rounded-2xl bg-gradient-to-br from-rose-50 to-orange-50 border border-rose-100">
+            <div class="text-xs font-bold text-rose-800">Tổng lượt đánh giá</div>
+            <div class="text-3xl font-black text-rose-600 mt-1" id="statTotalReviews">1,250+</div>
+            <div class="text-[11px] text-rose-600/80 mt-1">Từ các thành viên cộng đồng</div>
+          </div>
+          <div class="p-5 rounded-2xl bg-gradient-to-br from-amber-50 to-yellow-50 border border-amber-100">
+            <div class="text-xs font-bold text-amber-800">Điểm đánh giá trung bình</div>
+            <div class="text-3xl font-black text-amber-600 mt-1" id="statAvgRating">4.8 ⭐</div>
+            <div class="text-[11px] text-amber-600/80 mt-1">Chất lượng trải nghiệm cao</div>
+          </div>
         </div>
+
+        <!-- Hai bảng dữ liệu Aggregation -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4">
+          <!-- Bảng 1: Phân bố theo thành phố -->
+          <div class="space-y-3">
+            <h4 class="text-sm font-extrabold text-slate-900 flex items-center space-x-2">
+              <i class="fa-solid fa-city text-[#FF5422]"></i>
+              <span>Phân bố địa điểm theo thành phố</span>
+            </h4>
+            <div class="border border-slate-200 rounded-2xl overflow-hidden bg-slate-50/50">
+              <table class="w-full text-xs text-left">
+                <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                  <tr>
+                    <th class="p-3">Thành phố</th>
+                    <th class="p-3 text-center">Số địa điểm</th>
+                    <th class="p-3 text-center">Điểm TB</th>
+                    <th class="p-3 text-center">Lượt đánh giá</th>
+                  </tr>
+                </thead>
+                <tbody id="tableStatsCity" class="divide-y divide-slate-200 bg-white">
+                  <!-- Rendered by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Bảng 2: Top địa điểm điểm cao nhất -->
+          <div class="space-y-3">
+            <h4 class="text-sm font-extrabold text-slate-900 flex items-center space-x-2">
+              <i class="fa-solid fa-trophy text-amber-500"></i>
+              <span>Top 5 địa điểm được đánh giá cao nhất</span>
+            </h4>
+            <div class="border border-slate-200 rounded-2xl overflow-hidden bg-slate-50/50">
+              <table class="w-full text-xs text-left">
+                <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                  <tr>
+                    <th class="p-3">Tên địa điểm</th>
+                    <th class="p-3 text-center">Thành phố</th>
+                    <th class="p-3 text-center">Điểm sao</th>
+                    <th class="p-3 text-center">Số đánh giá</th>
+                  </tr>
+                </thead>
+                <tbody id="tableStatsTopRated" class="divide-y divide-slate-200 bg-white">
+                  <!-- Rendered by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
 
   </main>
 
-  <!-- ==================== FOOTER CHUẨN ĐẦY ĐỦ ==================== -->
-  <footer class="bg-white border-t border-slate-200 mt-12 py-8">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-      <div class="flex items-center space-x-2">
-        <div class="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs font-bold">
-          <i class="fa-solid fa-compass"></i>
+  <!-- ==================== FOOTER (ĐẦY ĐỦ THÔNG TIN ĐỀ TÀI & BẢN QUYỀN) ==================== -->
+  <footer class="bg-white border-t border-slate-100 mt-12 py-10 px-4 sm:px-6">
+    <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
+      
+      <!-- Logo & Giới thiệu -->
+      <div class="space-y-2 text-center md:text-left">
+        <div class="text-xl font-black text-[#FF5422]">
+          FoodTravel<span class="text-slate-900">.vn</span>
         </div>
-        <span class="font-bold text-slate-700">TravelVibe</span>
-        <span>• Nền tảng đánh giá và chia sẻ địa điểm du lịch</span>
+        <p class="text-xs text-slate-500 max-w-md">
+          Cộng đồng chia sẻ trải nghiệm ẩm thực và du lịch Việt Nam. Hệ thống quản lý dữ liệu không gian địa lý và đánh giá thời gian thực.
+        </p>
       </div>
 
-      <div class="flex items-center space-x-6 text-slate-400">
-        <span>Đà Nẵng</span>
-        <span>Hà Nội</span>
-        <span>TP. Hồ Chí Minh</span>
+      <!-- Thông tin đồ án -->
+      <div class="text-center md:text-right space-y-1">
+        <p class="text-xs font-bold text-slate-800">Đồ án NoSQL - Đề tài 04</p>
+        <p class="text-xs text-slate-500">Sinh viên thực hiện: Huỳnh Văn Ngọc</p>
+        <p class="text-[11px] text-slate-400">© 2026 FoodTravel.vn. Giữ toàn bộ bản quyền.</p>
       </div>
 
-      <div>
-        <span>© 2026 TravelVibe. Bảo lưu mọi quyền.</span>
-      </div>
     </div>
   </footer>
 
-  <!-- ==================== MODAL CHI TIẾT ĐỊA ĐIỂM ==================== -->
-  <div id="locationDetailModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-fade-in">
-    <div class="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-slate-200">
+  <!-- ==================== MODAL CHI TIẾT ĐỊA ĐIỂM & ĐÁNH GIÁ (SỬA LỖI GIỮ NGUYÊN VỊ TRÍ CUỘN) ==================== -->
+  <div id="locationDetailModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+    <div id="locationModalContainer" class="bg-white rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-y-auto shadow-2xl border border-slate-200 relative">
       
-      <!-- Modal Header Image & Close -->
-      <div class="relative h-56 sm:h-64 bg-slate-900 overflow-hidden shrink-0">
-        <img id="modalLocationImg" src="" alt="" class="w-full h-full object-cover opacity-90">
-        <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent"></div>
-        
-        <button onclick="closeLocationModal()" class="absolute top-4 right-4 w-9 h-9 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition-all cursor-pointer backdrop-blur-sm">
-          <i class="fa-solid fa-xmark text-sm"></i>
-        </button>
+      <!-- Nút đóng Modal -->
+      <button onclick="closeLocationModal()" class="absolute top-4 right-4 z-20 w-9 h-9 rounded-full bg-black/60 hover:bg-black text-white flex items-center justify-center transition-colors cursor-pointer shadow-md">
+        <i class="fa-solid fa-xmark text-sm"></i>
+      </button>
 
-        <div class="absolute bottom-4 left-4 right-4 text-white">
-          <div class="flex items-center space-x-2 mb-1.5">
-            <span id="modalCategoryBadge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/80 text-white backdrop-blur-sm">Địa danh</span>
-            <span id="modalCityBadge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-white/20 text-slate-200 backdrop-blur-sm">Đà Nẵng</span>
-          </div>
-          <h2 id="modalLocationTitle" class="text-xl sm:text-2xl font-extrabold text-white">Tên địa điểm</h2>
-          <p id="modalLocationAddress" class="text-xs text-slate-300 flex items-center mt-0.5">
-            <i class="fa-solid fa-location-dot mr-1.5 text-emerald-400"></i>
-            <span>Địa chỉ</span>
+      <!-- Banner Ảnh -->
+      <div class="relative h-64 sm:h-72 w-full bg-slate-900">
+        <img id="modalImg" src="" alt="Địa điểm" class="w-full h-full object-cover">
+        <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+        <div class="absolute bottom-4 left-4 right-4 text-white space-y-1">
+          <span id="modalCategoryBadge" class="px-3 py-1 rounded-full text-[10px] font-black bg-[#FF5422] text-white"></span>
+          <h3 id="modalName" class="text-xl sm:text-2xl font-black tracking-tight pt-1"></h3>
+          <p id="modalCity" class="text-xs text-slate-200 flex items-center space-x-1.5">
+            <i class="fa-solid fa-location-dot text-[#FF5422]"></i>
+            <span></span>
           </p>
         </div>
       </div>
 
-      <!-- Modal Body (Được tự động cuộn lên đầu khi mở) -->
-      <div id="modalScrollBody" class="p-5 sm:p-6 overflow-y-auto flex-1 space-y-6">
+      <!-- Nội dung chi tiết -->
+      <div id="locationModalBody" class="p-5 sm:p-6 space-y-6">
         
-        <!-- Quick Stats & Description -->
-        <div class="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100 text-xs">
+        <!-- Điểm đánh giá & Tọa độ -->
+        <div class="flex flex-wrap items-center justify-between gap-3 text-xs border-b border-slate-100 pb-4">
           <div class="flex items-center space-x-2">
-            <span class="text-amber-500 text-base font-extrabold flex items-center">
-              ⭐ <span id="modalRatingAvg" class="ml-1 text-slate-800">4.8</span>
+            <span class="text-base font-extrabold text-amber-500 flex items-center space-x-1">
+              <i class="fa-solid fa-star"></i>
+              <span id="modalRatingAvg">4.8</span>
             </span>
-            <span class="text-slate-400">|</span>
+            <span class="text-slate-300">|</span>
             <span id="modalTotalReviews" class="text-slate-600 font-semibold">12 đánh giá</span>
           </div>
 
           <div class="flex items-center space-x-2">
             <span class="text-slate-500">Tọa độ:</span>
-            <span id="modalCoords" class="font-mono text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md">[108.22, 16.06]</span>
+            <span id="modalCoords" class="font-mono text-[#FF5422] font-bold bg-[#FF5422]/10 px-2 py-0.5 rounded-md">[108.22, 16.06]</span>
           </div>
         </div>
 
         <p id="modalDescription" class="text-xs sm:text-sm text-slate-600 leading-relaxed font-normal"></p>
 
-        <!-- Form Đăng Review mới -->
-        <div class="bg-gradient-to-br from-emerald-50/60 via-teal-50/40 to-white p-4 sm:p-5 rounded-2xl border border-emerald-100 space-y-3">
-          <h4 class="text-xs font-bold text-emerald-900 uppercase tracking-wider flex items-center space-x-1.5">
-            <i class="fa-solid fa-pen-nib text-emerald-600"></i>
+        <!-- Form Viết đánh giá -->
+        <div class="bg-gradient-to-br from-[#FFF9F6] to-white p-4 sm:p-5 rounded-2xl border border-[#FBECE6] space-y-3">
+          <h4 class="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center space-x-1.5">
+            <i class="fa-solid fa-pen-nib text-[#FF5422]"></i>
             <span>Viết đánh giá của bạn</span>
           </h4>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
             <input type="text" id="inputReviewUser" placeholder="Họ và tên của bạn..." 
-                   class="px-3 py-2 bg-white rounded-xl border border-slate-200 outline-none focus:border-emerald-500">
+                   class="px-3.5 py-2.5 bg-white rounded-xl border border-slate-200 outline-none focus:border-[#FF5422]">
             
-            <div class="flex items-center space-x-2 bg-white px-3 py-2 rounded-xl border border-slate-200">
+            <div class="flex items-center space-x-2 bg-white px-3.5 py-2.5 rounded-xl border border-slate-200">
               <span class="text-slate-500">Đánh giá:</span>
               <select id="inputReviewRating" class="font-bold text-amber-500 outline-none bg-transparent cursor-pointer">
                 <option value="5">⭐⭐⭐⭐⭐ (5 sao)</option>
@@ -333,18 +567,18 @@
             </div>
           </div>
 
-          <textarea id="inputReviewContent" rows="2" placeholder="Chia sẻ trải nghiệm thực tế của bạn tại địa điểm này..." 
-                    class="w-full px-3 py-2 bg-white rounded-xl border border-slate-200 outline-none text-xs focus:border-emerald-500"></textarea>
+          <textarea id="inputReviewContent" rows="2" placeholder="Chia sẻ cảm nhận thực tế của bạn về địa điểm này..." 
+                    class="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-200 outline-none text-xs focus:border-[#FF5422]"></textarea>
 
-          <button onclick="submitReview()" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center space-x-1.5 cursor-pointer">
+          <button onclick="submitReview()" class="px-5 py-2.5 bg-[#FF5422] hover:bg-[#E84615] text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-[#FF5422]/20 flex items-center space-x-1.5 cursor-pointer">
             <i class="fa-solid fa-paper-plane"></i>
             <span>Gửi đánh giá</span>
           </button>
         </div>
 
-        <!-- Danh sách Reviews lồng nhau & Replies -->
+        <!-- Danh sách đánh giá & Phản hồi phân cấp -->
         <div class="space-y-3">
-          <h4 class="text-sm font-bold text-slate-800 flex items-center space-x-2">
+          <h4 class="text-sm font-extrabold text-slate-900 flex items-center space-x-2">
             <span>Đánh giá từ cộng đồng</span>
             <span id="reviewsCountBadge" class="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">0</span>
           </h4>
@@ -359,12 +593,12 @@
     </div>
   </div>
 
-  <!-- ==================== MODAL THÊM ĐỊA ĐIỂM ==================== -->
-  <div id="newLocationModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+  <!-- ==================== MODAL THÊM ĐỊA ĐIỂM MỚI ==================== -->
+  <div id="newLocationModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
       <div class="flex items-center justify-between border-b border-slate-100 pb-3">
         <h3 class="text-base font-bold text-slate-800 flex items-center space-x-2">
-          <i class="fa-solid fa-map-pin text-emerald-600"></i>
+          <i class="fa-solid fa-map-pin text-[#FF5422]"></i>
           <span>Thêm địa điểm mới</span>
         </h3>
         <button onclick="closeNewLocationModal()" class="w-8 h-8 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center cursor-pointer">
@@ -374,14 +608,14 @@
 
       <div class="space-y-3 text-xs">
         <div>
-          <label class="font-bold text-slate-700 block mb-1">Tên địa điểm *</label>
-          <input type="text" id="newLocName" placeholder="Ví dụ: Bến Nhà Rồng, Chợ Bến Thành..." class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-emerald-500">
+          <label class="font-bold text-slate-700 block mb-1">Tên địa điểm / Quán ăn *</label>
+          <input type="text" id="newLocName" placeholder="Ví dụ: Bún chả Hương Liên, Phố đi bộ..." class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-[#FF5422]">
         </div>
 
         <div class="grid grid-cols-2 gap-2">
           <div>
             <label class="font-bold text-slate-700 block mb-1">Thành phố *</label>
-            <select id="newLocCity" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-emerald-500 font-medium">
+            <select id="newLocCity" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-[#FF5422] font-medium">
               <option value="Đà Nẵng">Đà Nẵng</option>
               <option value="Hà Nội">Hà Nội</option>
               <option value="TP.HCM">TP. Hồ Chí Minh</option>
@@ -389,11 +623,11 @@
           </div>
           <div>
             <label class="font-bold text-slate-700 block mb-1">Phân loại *</label>
-            <select id="newLocCategory" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-emerald-500 font-medium">
+            <select id="newLocCategory" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-[#FF5422] font-medium">
               <option value="Landmark">Địa danh</option>
               <option value="Beach">Bãi biển</option>
               <option value="Museum">Bảo tàng</option>
-              <option value="Market">Chợ &amp; Mua sắm</option>
+              <option value="Market">Ẩm thực & Chợ</option>
               <option value="Pagoda">Đền chùa</option>
               <option value="Attraction">Vui chơi giải trí</option>
               <option value="Park">Công viên</option>
@@ -404,32 +638,32 @@
         <div class="grid grid-cols-2 gap-2">
           <div>
             <label class="font-bold text-slate-700 block mb-1">Kinh độ (Longitude) *</label>
-            <input type="number" step="0.0001" id="newLocLng" placeholder="108.22" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-emerald-500 font-mono">
+            <input type="number" step="0.0001" id="newLocLng" placeholder="108.22" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-[#FF5422] font-mono">
           </div>
           <div>
             <label class="font-bold text-slate-700 block mb-1">Vĩ độ (Latitude) *</label>
-            <input type="number" step="0.0001" id="newLocLat" placeholder="16.06" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-emerald-500 font-mono">
+            <input type="number" step="0.0001" id="newLocLat" placeholder="16.06" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-[#FF5422] font-mono">
           </div>
         </div>
 
         <div>
           <label class="font-bold text-slate-700 block mb-1">Mô tả tóm tắt</label>
-          <textarea id="newLocDesc" rows="2" placeholder="Điểm du lịch nổi tiếng với phong cảnh đẹp..." class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-emerald-500"></textarea>
+          <textarea id="newLocDesc" rows="2" placeholder="Điểm đến hấp dẫn với món ngon đặc sắc..." class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-[#FF5422]"></textarea>
         </div>
       </div>
 
       <div class="pt-2 flex items-center justify-end space-x-2">
         <button onclick="closeNewLocationModal()" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer">Hủy</button>
-        <button onclick="submitNewLocation()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm cursor-pointer">Lưu địa điểm</button>
+        <button onclick="submitNewLocation()" class="px-5 py-2.5 bg-[#FF5422] hover:bg-[#E84615] text-white rounded-xl text-xs font-bold shadow-sm shadow-[#FF5422]/20 cursor-pointer">Lưu địa điểm</button>
       </div>
     </div>
   </div>
 
   <!-- ==================== MODAL ĐĂNG NHẬP / ĐĂNG KÝ ==================== -->
-  <div id="authModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+  <div id="authModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 space-y-4">
       <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-        <h3 id="authModalTitle" class="text-base font-bold text-slate-800">Đăng nhập tài khoản</h3>
+        <h3 id="authModalTitle" class="text-base font-black text-slate-900">Đăng nhập tài khoản</h3>
         <button onclick="closeAuthModal()" class="w-8 h-8 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center cursor-pointer">
           <i class="fa-solid fa-xmark"></i>
         </button>
@@ -438,15 +672,15 @@
       <div class="space-y-3 text-xs">
         <div>
           <label class="font-bold text-slate-700 block mb-1">Họ và tên</label>
-          <input type="text" id="authUserName" placeholder="Ví dụ: Huỳnh Văn Ngọc" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-emerald-500">
+          <input type="text" id="authUserName" placeholder="Ví dụ: Huỳnh Văn Ngọc" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-[#FF5422]">
         </div>
         <div>
           <label class="font-bold text-slate-700 block mb-1">Email</label>
-          <input type="email" id="authUserEmail" placeholder="name@example.com" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-emerald-500">
+          <input type="email" id="authUserEmail" placeholder="name@example.com" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-[#FF5422]">
         </div>
       </div>
 
-      <button onclick="handleAuthSubmit()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm cursor-pointer transition-all">
+      <button onclick="handleAuthSubmit()" class="w-full py-3 bg-[#FF5422] hover:bg-[#E84615] text-white rounded-2xl text-xs font-bold shadow-md shadow-[#FF5422]/20 cursor-pointer transition-all">
         Xác nhận
       </button>
     </div>
