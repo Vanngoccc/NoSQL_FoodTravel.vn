@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TravelVibe - Nền tảng Review Du lịch & Khám phá Địa điểm</title>
+  <title>TravelVibe - Nền tảng đánh giá và khám phá địa điểm du lịch</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- FontAwesome Icons -->
@@ -18,12 +18,12 @@
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-    #mapViewContainer { height: 420px; z-index: 10; }
+    #mapViewContainer { height: 480px; z-index: 10; }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
 
-  <!-- ==================== HEADER (FIGMA STYLE) ==================== -->
+  <!-- ==================== THANH HEADER ĐIỀU HƯỚNG ==================== -->
   <header class="bg-white/95 backdrop-blur-md sticky top-0 z-40 border-b border-slate-100 shadow-xs">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 h-18 flex items-center justify-between gap-4">
       
@@ -34,43 +34,49 @@
         </div>
         <div>
           <span class="text-xl font-extrabold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">TravelVibe</span>
-          <span class="block text-[10px] text-slate-400 font-semibold tracking-wider uppercase">MongoDB Review System</span>
+          <span class="block text-[10px] text-slate-400 font-semibold tracking-wider">Cộng đồng du lịch &amp; ẩm thực</span>
         </div>
       </div>
 
       <!-- Quick Nav Buttons -->
       <div class="hidden md:flex items-center space-x-1 bg-slate-100/80 p-1.5 rounded-2xl">
-        <button onclick="switchView('explore')" id="btnNavExplore" class="px-4 py-2 rounded-xl text-xs font-bold transition-all bg-white text-emerald-600 shadow-xs flex items-center space-x-1.5">
-          <i class="fa-solid fa-fire"></i>
+        <button onclick="switchView('explore')" id="btnNavExplore" class="px-4 py-2 rounded-xl text-xs font-bold transition-all bg-white text-emerald-600 shadow-xs flex items-center space-x-1.5 cursor-pointer">
+          <i class="fa-solid fa-compass"></i>
           <span>Khám phá</span>
         </button>
-        <button onclick="switchView('map')" id="btnNavMap" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 transition-all flex items-center space-x-1.5">
+        <button onclick="switchView('map')" id="btnNavMap" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 transition-all flex items-center space-x-1.5 cursor-pointer">
           <i class="fa-solid fa-map-location-dot"></i>
-          <span>Bản đồ (2dsphere)</span>
+          <span>Bản đồ du lịch</span>
         </button>
-        <button onclick="switchView('stats')" id="btnNavStats" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 transition-all flex items-center space-x-1.5">
+        <button onclick="switchView('stats')" id="btnNavStats" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 transition-all flex items-center space-x-1.5 cursor-pointer">
           <i class="fa-solid fa-chart-pie"></i>
-          <span>Thống kê (Aggregation)</span>
+          <span>Thống kê đánh giá</span>
         </button>
       </div>
 
-      <!-- Right Actions: Thêm địa điểm + SV Barem Info -->
+      <!-- Right Actions: Thêm địa điểm + Đăng nhập/Đăng ký -->
       <div class="flex items-center space-x-2.5">
         <button onclick="openNewLocationModal()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all shadow-sm shadow-emerald-200 flex items-center space-x-1.5 cursor-pointer">
           <i class="fa-solid fa-plus text-xs"></i>
           <span class="hidden sm:inline">Thêm địa điểm</span>
         </button>
-        <div class="px-3 py-1.5 bg-slate-100 rounded-xl border border-slate-200 text-[11px] font-bold text-slate-700 flex items-center space-x-1.5">
-          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span id="badgeDbCount">100 địa điểm</span>
+        
+        <!-- Khối Đăng nhập / Tài khoản người dùng -->
+        <div id="userAccountSection" class="flex items-center space-x-1.5">
+          <button onclick="openAuthModal('login')" class="px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer">
+            Đăng nhập
+          </button>
+          <button onclick="openAuthModal('register')" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white transition-all shadow-xs cursor-pointer">
+            Đăng ký
+          </button>
         </div>
       </div>
 
     </div>
   </header>
 
-  <!-- ==================== HERO SEARCH & BANNER (FIGMA) ==================== -->
-  <section class="relative bg-gradient-to-br from-emerald-900 via-teal-900 to-slate-900 text-white py-12 px-4 sm:px-6 overflow-hidden">
+  <!-- ==================== BANNER TÌM KIẾM CHÍNH (CHỈ HIỂN THỊ Ở TAB KHÁM PHÁ) ==================== -->
+  <section id="heroBannerSection" class="relative bg-gradient-to-br from-emerald-900 via-teal-900 to-slate-900 text-white py-12 px-4 sm:px-6 overflow-hidden">
     <!-- Background Glow Circles -->
     <div class="absolute -top-24 -right-24 w-96 h-96 bg-emerald-500/20 rounded-full blur-3xl pointer-events-none"></div>
     <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-teal-500/20 rounded-full blur-3xl pointer-events-none"></div>
@@ -78,23 +84,23 @@
     <div class="max-w-5xl mx-auto relative z-10 text-center space-y-4">
       <div class="inline-flex items-center space-x-2 bg-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/15 text-xs font-medium text-emerald-300">
         <i class="fa-solid fa-sparkles"></i>
-        <span>Đồ án NoSQL Đề tài 04 • CSDL MongoDB & ExpressJS</span>
+        <span>Nền tảng chia sẻ và trải nghiệm du lịch Việt Nam</span>
       </div>
 
-      <h1 class="text-3xl sm:text-5xl font-extrabold tracking-tight">
-        Khám phá &amp; Review Địa điểm <br class="hidden sm:inline"/>
-        <span class="bg-gradient-to-r from-emerald-300 to-teal-200 bg-clip-text text-transparent">Du lịch &amp; Ẩm thực Việt Nam</span>
+      <h1 class="text-3xl sm:text-5xl font-extrabold tracking-tight leading-tight">
+        Khám phá và đánh giá địa điểm <br class="hidden sm:inline"/>
+        <span class="bg-gradient-to-r from-emerald-300 to-teal-200 bg-clip-text text-transparent leading-relaxed inline-block pt-1">du lịch &amp; ẩm thực Việt Nam</span>
       </h1>
       
       <p class="text-slate-300 text-xs sm:text-sm max-w-2xl mx-auto font-normal">
-        Hệ thống tích hợp tìm kiếm toàn văn (Text Search), tọa độ không gian địa lý (2dsphere Geospatial) và Aggregation Pipeline phân tích thời gian thực.
+        Hệ thống tích hợp tìm kiếm toàn văn, định vị không gian địa lý và phân tích dữ liệu đánh giá thời gian thực.
       </p>
 
       <!-- Search Input Box -->
       <div class="max-w-3xl mx-auto mt-6 bg-white p-2 rounded-2xl shadow-xl flex flex-col sm:flex-row items-center gap-2 border border-slate-100">
         <div class="flex-1 flex items-center px-3 w-full">
           <i class="fa-solid fa-magnifying-glass text-slate-400 mr-2 text-sm"></i>
-          <input type="text" id="searchInput" placeholder="Tìm theo tên địa điểm, danh lam, món ăn..." 
+          <input type="text" id="searchInput" placeholder="Tìm kiếm tên địa điểm, danh lam thắng cảnh..." 
                  class="w-full py-2 text-sm text-slate-800 placeholder-slate-400 outline-none bg-transparent"
                  onkeypress="if(event.key === 'Enter') handleSearch()">
         </div>
@@ -105,10 +111,10 @@
         <div class="flex items-center px-2 w-full sm:w-auto">
           <i class="fa-solid fa-location-dot text-emerald-600 mr-1.5 text-xs"></i>
           <select id="filterCity" onchange="applyFilters()" class="text-xs font-bold text-slate-700 bg-transparent outline-none cursor-pointer py-2">
-            <option value="ALL">Tất cả Thành phố</option>
-            <option value="Đà Nẵng">Đà Nẵng (25)</option>
-            <option value="Hà Nội">Hà Nội (35)</option>
-            <option value="TP.HCM">TP. Hồ Chí Minh (40)</option>
+            <option value="ALL">Tất cả thành phố</option>
+            <option value="Đà Nẵng">Đà Nẵng</option>
+            <option value="Hà Nội">Hà Nội</option>
+            <option value="TP.HCM">TP. Hồ Chí Minh</option>
           </select>
         </div>
 
@@ -122,103 +128,108 @@
     </div>
   </section>
 
-  <!-- ==================== MAIN CONTENT ==================== -->
+  <!-- ==================== KHÔNG GIAN NỘI DUNG CHÍNH ==================== -->
   <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
 
-    <!-- CATEGORY FILTER CHIPS -->
-    <div class="flex items-center justify-between gap-3 overflow-x-auto no-scrollbar py-1">
+    <!-- BỘ LỌC DANH MỤC (ĐÃ XÓA ICON THEO YÊU CẦU) -->
+    <div id="categoryFilterBar" class="flex items-center justify-between gap-3 overflow-x-auto no-scrollbar py-1">
       <div class="flex items-center space-x-2 shrink-0" id="categoryChipsContainer">
         <button onclick="filterCategory('ALL')" class="category-chip active px-4 py-2 rounded-full text-xs font-bold bg-emerald-600 text-white shadow-xs">Tất cả</button>
-        <button onclick="filterCategory('Landmark')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100">🏛️ Landmark</button>
-        <button onclick="filterCategory('Beach')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100">🏖️ Bãi biển</button>
-        <button onclick="filterCategory('Museum')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100">🏺 Bảo tàng</button>
-        <button onclick="filterCategory('Market')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100">🛍️ Chợ &amp; Mua sắm</button>
-        <button onclick="filterCategory('Pagoda')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100">⛩️ Đền chùa</button>
-        <button onclick="filterCategory('Attraction')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100">🎡 Vui chơi giải trí</button>
-        <button onclick="filterCategory('Park')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100">🌳 Công viên</button>
+        <button onclick="filterCategory('Landmark')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100">Địa danh</button>
+        <button onclick="filterCategory('Beach')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100">Bãi biển</button>
+        <button onclick="filterCategory('Museum')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100">Bảo tàng</button>
+        <button onclick="filterCategory('Market')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100">Chợ &amp; Mua sắm</button>
+        <button onclick="filterCategory('Pagoda')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100">Đền chùa</button>
+        <button onclick="filterCategory('Attraction')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100">Vui chơi giải trí</button>
+        <button onclick="filterCategory('Park')" class="category-chip px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100">Công viên</button>
       </div>
 
       <!-- Quick Geolocation Button (Tìm gần tôi) -->
-      <button onclick="getUserCurrentLocationAndFetchNearby()" class="shrink-0 px-3.5 py-2 rounded-full text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 transition-all flex items-center space-x-1.5 shadow-2xs cursor-pointer">
-        <i class="fa-solid fa-crosshairs text-amber-600"></i>
+      <button onclick="getUserCurrentLocationAndFetchNearby()" class="shrink-0 px-3.5 py-2 rounded-full text-xs font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition-all flex items-center space-x-1.5 shadow-2xs cursor-pointer">
+        <i class="fa-solid fa-crosshairs text-emerald-600"></i>
         <span>Tìm gần vị trí của tôi</span>
       </button>
     </div>
 
-    <!-- ==================== VIEW 1: EXPLORE CARDS GRID ==================== -->
+    <!-- ==================== VIEW 1: DANH SÁCH ĐỊA ĐIỂM ==================== -->
     <div id="viewExplore" class="space-y-4">
       <div class="flex items-center justify-between">
         <div>
           <h2 class="text-lg font-bold text-slate-800 flex items-center space-x-2">
-            <span>Danh sách Địa điểm nổi bật</span>
-            <span id="locationsCountLabel" class="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">100 kết quả</span>
+            <span>Danh sách địa điểm nổi bật</span>
+            <span id="locationsCountLabel" class="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">100 địa điểm</span>
           </h2>
-          <p class="text-xs text-slate-500">Dữ liệu được nạp vào MongoDB hỗ trợ tính năng Real-time Rating và Text Search</p>
+          <p class="text-xs text-slate-500">Khám phá các điểm đến được yêu thích cùng đánh giá thực tế từ cộng đồng du lịch</p>
         </div>
 
         <!-- Sắp xếp -->
         <div class="flex items-center space-x-2 text-xs">
           <span class="text-slate-400 font-medium">Sắp xếp:</span>
           <select id="sortBy" onchange="applyFilters()" class="bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-700 outline-none cursor-pointer">
-            <option value="rating">⭐ Đánh giá cao nhất</option>
-            <option value="reviews">💬 Nhiều review nhất</option>
-            <option value="name">🔤 Theo tên A-Z</option>
+            <option value="rating">Đánh giá cao nhất</option>
+            <option value="reviews">Nhiều đánh giá nhất</option>
+            <option value="name">Theo thứ tự A-Z</option>
           </select>
         </div>
       </div>
 
-      <!-- Cards Grid -->
+      <!-- Lưới Cards Địa điểm (Phân trang 12 thẻ/trang) -->
       <div id="locationsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+        <!-- Rendered by JS -->
+      </div>
+
+      <!-- THANH ĐIỀU HƯỚNG PHÂN TRANG (PAGINATION) -->
+      <div id="paginationContainer" class="pt-6 pb-2 flex items-center justify-center space-x-2">
         <!-- Rendered by JS -->
       </div>
     </div>
 
-    <!-- ==================== VIEW 2: MAP VIEW (2DSPHERE) ==================== -->
+    <!-- ==================== VIEW 2: BẢN ĐỒ VIỆT NAM (2DSPHERE) ==================== -->
     <div id="viewMap" class="hidden space-y-4">
       <div class="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h3 class="text-base font-bold text-slate-800 flex items-center space-x-2">
               <i class="fa-solid fa-map-location-dot text-emerald-600"></i>
-              <span>Bản đồ Trực quan hóa Tọa độ Không gian Địa lý (Geospatial)</span>
+              <span>Bản đồ trực quan hóa các địa điểm tại Việt Nam</span>
             </h3>
-            <p class="text-xs text-slate-500">Mỗi địa điểm lưu trữ toạ độ GeoJSON [Longitude, Latitude] và truy vấn qua index 2dsphere.</p>
+            <p class="text-xs text-slate-500">Tọa độ được ánh xạ chính xác trên nền bản đồ Việt Nam, hỗ trợ tìm kiếm theo khoảng cách thực tế.</p>
           </div>
 
           <div class="flex items-center space-x-2">
-            <button onclick="focusCityMap('Đà Nẵng')" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 rounded-xl text-xs font-semibold text-slate-700 transition-all">Đà Nẵng</button>
-            <button onclick="focusCityMap('Hà Nội')" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 rounded-xl text-xs font-semibold text-slate-700 transition-all">Hà Nội</button>
-            <button onclick="focusCityMap('TP.HCM')" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 rounded-xl text-xs font-semibold text-slate-700 transition-all">TP.HCM</button>
+            <button onclick="focusCityMap('Đà Nẵng')" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 rounded-xl text-xs font-semibold text-slate-700 transition-all cursor-pointer">Đà Nẵng</button>
+            <button onclick="focusCityMap('Hà Nội')" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 rounded-xl text-xs font-semibold text-slate-700 transition-all cursor-pointer">Hà Nội</button>
+            <button onclick="focusCityMap('TP.HCM')" class="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 rounded-xl text-xs font-semibold text-slate-700 transition-all cursor-pointer">TP.HCM</button>
           </div>
         </div>
 
         <!-- Leaflet Map Container -->
-        <div id="mapViewContainer" class="rounded-2xl border border-slate-200 overflow-hidden shadow-inner"></div>
+        <div id="mapViewContainer" class="rounded-2xl border border-slate-200 overflow-hidden shadow-inner w-full"></div>
 
-        <div class="p-3 bg-emerald-50/70 border border-emerald-200 rounded-2xl flex items-center justify-between text-xs text-emerald-800">
+        <div class="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between text-xs text-slate-600">
           <span class="flex items-center space-x-2">
             <i class="fa-solid fa-circle-info text-emerald-600"></i>
-            <span>Click vào bất kỳ điểm nào trên bản đồ hoặc chọn thành phố để xem vị trí các điểm du lịch.</span>
+            <span>Bấm vào bất kỳ điểm đánh dấu (marker) trên bản đồ để xem tên và mở đánh giá chi tiết.</span>
           </span>
-          <span class="font-mono font-bold">Index: 2dsphere</span>
+          <span class="text-[11px] font-semibold text-emerald-700">100 điểm dữ liệu chuẩn</span>
         </div>
       </div>
     </div>
 
-    <!-- ==================== VIEW 3: AGGREGATION STATS (SV2) ==================== -->
+    <!-- ==================== VIEW 3: BẢNG THỐNG KÊ ĐÁNH GIÁ ==================== -->
     <div id="viewStats" class="hidden space-y-6">
       <div class="grid grid-cols-1 md:grid-cols-3 gap-5" id="statsCardsContainer">
         <!-- Rendered by JS -->
       </div>
 
-      <!-- Top Rated Places Table -->
+      <!-- Top địa điểm đánh giá cao nhất -->
       <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-4">
         <div>
           <h3 class="text-base font-bold text-slate-800 flex items-center space-x-2">
             <i class="fa-solid fa-trophy text-amber-500"></i>
-            <span>Top Địa điểm Đánh giá Cao nhất theo từng Thành phố (Aggregation Pipeline)</span>
+            <span>Top địa điểm được đánh giá cao nhất theo từng thành phố</span>
           </h3>
-          <p class="text-xs text-slate-500">Truy vấn sử dụng pipeline: $sort -> $group by city -> $project slice top 3</p>
+          <p class="text-xs text-slate-500">Bảng xếp hạng tổng hợp dựa trên số sao trung bình và số lượng phản hồi từ du khách.</p>
         </div>
 
         <div id="topRatedTableContainer" class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -229,7 +240,30 @@
 
   </main>
 
-  <!-- ==================== MODAL CHI TIẾT & REVIEW (FIGMA STYLE) ==================== -->
+  <!-- ==================== FOOTER CHUẨN ĐẦY ĐỦ ==================== -->
+  <footer class="bg-white border-t border-slate-200 mt-12 py-8">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+      <div class="flex items-center space-x-2">
+        <div class="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs font-bold">
+          <i class="fa-solid fa-compass"></i>
+        </div>
+        <span class="font-bold text-slate-700">TravelVibe</span>
+        <span>• Nền tảng đánh giá và chia sẻ địa điểm du lịch</span>
+      </div>
+
+      <div class="flex items-center space-x-6 text-slate-400">
+        <span>Đà Nẵng</span>
+        <span>Hà Nội</span>
+        <span>TP. Hồ Chí Minh</span>
+      </div>
+
+      <div>
+        <span>© 2026 TravelVibe. Bảo lưu mọi quyền.</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ==================== MODAL CHI TIẾT ĐỊA ĐIỂM ==================== -->
   <div id="locationDetailModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-fade-in">
     <div class="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-slate-200">
       
@@ -244,19 +278,19 @@
 
         <div class="absolute bottom-4 left-4 right-4 text-white">
           <div class="flex items-center space-x-2 mb-1.5">
-            <span id="modalCategoryBadge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/80 text-white backdrop-blur-sm">Landmark</span>
+            <span id="modalCategoryBadge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/80 text-white backdrop-blur-sm">Địa danh</span>
             <span id="modalCityBadge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-white/20 text-slate-200 backdrop-blur-sm">Đà Nẵng</span>
           </div>
-          <h2 id="modalLocationTitle" class="text-xl sm:text-2xl font-extrabold text-white">Cầu Rồng</h2>
+          <h2 id="modalLocationTitle" class="text-xl sm:text-2xl font-extrabold text-white">Tên địa điểm</h2>
           <p id="modalLocationAddress" class="text-xs text-slate-300 flex items-center mt-0.5">
             <i class="fa-solid fa-location-dot mr-1.5 text-emerald-400"></i>
-            <span>Đà Nẵng, Việt Nam</span>
+            <span>Địa chỉ</span>
           </p>
         </div>
       </div>
 
-      <!-- Modal Body (Scrollable) -->
-      <div class="p-5 sm:p-6 overflow-y-auto flex-1 space-y-6">
+      <!-- Modal Body (Được tự động cuộn lên đầu khi mở) -->
+      <div id="modalScrollBody" class="p-5 sm:p-6 overflow-y-auto flex-1 space-y-6">
         
         <!-- Quick Stats & Description -->
         <div class="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100 text-xs">
@@ -280,7 +314,7 @@
         <div class="bg-gradient-to-br from-emerald-50/60 via-teal-50/40 to-white p-4 sm:p-5 rounded-2xl border border-emerald-100 space-y-3">
           <h4 class="text-xs font-bold text-emerald-900 uppercase tracking-wider flex items-center space-x-1.5">
             <i class="fa-solid fa-pen-nib text-emerald-600"></i>
-            <span>Viết đánh giá của bạn (Real-time Rating)</span>
+            <span>Viết đánh giá của bạn</span>
           </h4>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
@@ -304,7 +338,7 @@
 
           <button onclick="submitReview()" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center space-x-1.5 cursor-pointer">
             <i class="fa-solid fa-paper-plane"></i>
-            <span>Gửi đánh giá &amp; Cập nhật Rating</span>
+            <span>Gửi đánh giá</span>
           </button>
         </div>
 
@@ -325,15 +359,15 @@
     </div>
   </div>
 
-  <!-- ==================== MODAL THÊM ĐỊA ĐIỂM (CRUD SV1) ==================== -->
+  <!-- ==================== MODAL THÊM ĐỊA ĐIỂM ==================== -->
   <div id="newLocationModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
     <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
       <div class="flex items-center justify-between border-b border-slate-100 pb-3">
         <h3 class="text-base font-bold text-slate-800 flex items-center space-x-2">
           <i class="fa-solid fa-map-pin text-emerald-600"></i>
-          <span>Thêm Địa điểm Mới (CRUD SV1)</span>
+          <span>Thêm địa điểm mới</span>
         </h3>
-        <button onclick="closeNewLocationModal()" class="w-8 h-8 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center">
+        <button onclick="closeNewLocationModal()" class="w-8 h-8 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center cursor-pointer">
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
@@ -356,12 +390,13 @@
           <div>
             <label class="font-bold text-slate-700 block mb-1">Phân loại *</label>
             <select id="newLocCategory" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-emerald-500 font-medium">
-              <option value="Landmark">Landmark</option>
-              <option value="Beach">Beach</option>
-              <option value="Museum">Museum</option>
-              <option value="Market">Market</option>
-              <option value="Pagoda">Pagoda</option>
-              <option value="Attraction">Attraction</option>
+              <option value="Landmark">Địa danh</option>
+              <option value="Beach">Bãi biển</option>
+              <option value="Museum">Bảo tàng</option>
+              <option value="Market">Chợ &amp; Mua sắm</option>
+              <option value="Pagoda">Đền chùa</option>
+              <option value="Attraction">Vui chơi giải trí</option>
+              <option value="Park">Công viên</option>
             </select>
           </div>
         </div>
@@ -384,9 +419,36 @@
       </div>
 
       <div class="pt-2 flex items-center justify-end space-x-2">
-        <button onclick="closeNewLocationModal()" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100">Hủy</button>
-        <button onclick="submitNewLocation()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm">Lưu địa điểm vào MongoDB</button>
+        <button onclick="closeNewLocationModal()" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer">Hủy</button>
+        <button onclick="submitNewLocation()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm cursor-pointer">Lưu địa điểm</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL ĐĂNG NHẬP / ĐĂNG KÝ ==================== -->
+  <div id="authModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+    <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 id="authModalTitle" class="text-base font-bold text-slate-800">Đăng nhập tài khoản</h3>
+        <button onclick="closeAuthModal()" class="w-8 h-8 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center cursor-pointer">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="font-bold text-slate-700 block mb-1">Họ và tên</label>
+          <input type="text" id="authUserName" placeholder="Ví dụ: Huỳnh Văn Ngọc" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-emerald-500">
+        </div>
+        <div>
+          <label class="font-bold text-slate-700 block mb-1">Email</label>
+          <input type="email" id="authUserEmail" placeholder="name@example.com" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-emerald-500">
+        </div>
+      </div>
+
+      <button onclick="handleAuthSubmit()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm cursor-pointer transition-all">
+        Xác nhận
+      </button>
     </div>
   </div>
 
