@@ -8,113 +8,94 @@ mongoose.connect('mongodb://127.0.0.1:27017/nosql_locations_db')
 
 // Từ điển ảnh chuẩn hóa sát thực tế từng loại hình tại Việt Nam
 const realisticImages = {
-  // Bãi biển
   Beach: [
     'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&auto=format&fit=crop',
     'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=800&auto=format&fit=crop',
     'https://images.unsplash.com/photo-1519046904884-53103b34b206?w=800&auto=format&fit=crop'
   ],
-  // Di tích, Cầu, Biểu tượng đô thị
   Landmark: [
-    'https://images.unsplash.com/photo-1583417319070-4a69db38a482?w=800&auto=format&fit=crop', // Cầu Vàng / Đà Nẵng
-    'https://images.unsplash.com/photo-1528127269322-539801943592?w=800&auto=format&fit=crop', // Việt Nam phong cảnh
+    'https://images.unsplash.com/photo-1583417319070-4a69db38a482?w=800&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1528127269322-539801943592?w=800&auto=format&fit=crop',
     'https://images.unsplash.com/photo-1596422846543-75c6fc197f07?w=800&auto=format&fit=crop'
   ],
-  // Đền, Chùa, Di tích tâm linh
   Pagoda: [
     'https://images.unsplash.com/photo-1544644181-1484b3fdfc62?w=800&auto=format&fit=crop',
     'https://images.unsplash.com/photo-1569154941061-e231b4725ef1?w=800&auto=format&fit=crop'
   ],
-  // Chợ & Mua sắm
   Market: [
-    'https://images.unsplash.com/photo-1533900298318-6b8da08a523e?w=800&auto=format&fit=crop',
-    'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&auto=format&fit=crop'
+    'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1582878826629-29b7ad1cdc43?w=800&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1533900298318-6b8da08a523e?w=800&auto=format&fit=crop'
   ],
-  // Bảo tàng & Văn hóa
   Museum: [
     'https://images.unsplash.com/photo-1566127444979-b3d2b654e3d7?w=800&auto=format&fit=crop',
     'https://images.unsplash.com/photo-1582555172866-f73bb12a2ab3?w=800&auto=format&fit=crop'
   ],
-  // Khu vui chơi giải trí & Điểm tham quan
   Attraction: [
     'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800&auto=format&fit=crop',
     'https://images.unsplash.com/photo-1513836279014-a89f7a76ae86?w=800&auto=format&fit=crop'
   ],
-  // Công viên cây xanh
   Park: [
     'https://images.unsplash.com/photo-1519331379826-f10be5486c6f?w=800&auto=format&fit=crop',
     'https://images.unsplash.com/photo-1448375240586-882707db888b?w=800&auto=format&fit=crop'
-  ],
-  // Trường Đại học & Giáo dục
-  Education: [
-    'https://images.unsplash.com/photo-1562774053-701939374585?w=800&auto=format&fit=crop',
-    'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&auto=format&fit=crop'
-  ],
-  // Bệnh viện & Y tế
-  Hospital: [
-    'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=800&auto=format&fit=crop',
-    'https://images.unsplash.com/photo-1586773860418-d37222d8fce3?w=800&auto=format&fit=crop'
-  ],
-  // Sân bay, Nhà ga, Bến xe
-  Transport: [
-    'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&auto=format&fit=crop',
-    'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=800&auto=format&fit=crop'
-  ],
-  // Tòa nhà cao ốc & Trung tâm thương mại
-  Mall: [
-    'https://images.unsplash.com/photo-1567449303078-57ad995bd301?w=800&auto=format&fit=crop'
-  ],
-  Building: [
-    'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800&auto=format&fit=crop'
-  ],
-  Culture: [
-    'https://images.unsplash.com/photo-1544644181-1484b3fdfc62?w=800&auto=format&fit=crop'
-  ],
-  Stadium: [
-    'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=800&auto=format&fit=crop'
   ]
 };
 
-// Hàm sinh danh sách review
-const generateRandomReviews = (locationName) => {
-  const comments = [
-    { text: 'Địa điểm rất đẹp, không khí trong lành, đáng để ghé thăm trải nghiệm!', rate: 5 },
-    { text: 'Phong cảnh tuyệt vời nhưng cuối tuần khá đông. Nên ghé sớm để thuận tiện tham quan.', rate: 4 },
-    { text: 'Trải nghiệm rất tốt, không gian sạch sẽ, vị trí dễ tìm.', rate: 5 },
-    { text: 'Dịch vụ chu đáo, chi phí hợp lý, phù hợp đi cùng gia đình và bạn bè.', rate: 4 },
-    { text: 'Không gian thoáng đãng, cảnh quan được gìn giữ cẩn thận. Rất hài lòng!', rate: 5 }
-  ];
+// Mảng đánh giá chân thực về ẩm thực và du lịch Việt Nam
+const sampleReviewComments = [
+  { text: 'Món ăn đậm đà chuẩn vị địa phương, nước dùng thanh ngọt, phục vụ rất nhanh nhẹn!', rate: 5 },
+  { text: 'Không gian thoáng mát, cảnh quan đẹp tuyệt vời. Cuối tuần khá đông nên cần đi sớm một chút.', rate: 4 },
+  { text: 'Trải nghiệm rất đáng tiền! Đồ ăn ngon, giá cả niêm yết rõ ràng không lo chặt chém.', rate: 5 },
+  { text: 'Vị trí thuận tiện, dễ tìm kiếm. Rất thích hợp để dẫn gia đình hoặc bạn bè tới tụ họp cuối tuần.', rate: 5 },
+  { text: 'Điểm check-in chụp hình cực kỳ đẹp, đồ uống và món ăn nhẹ giá cả rất hợp lý.', rate: 4 },
+  { text: 'Hương vị truyền thống khó quên, phục vụ chu đáo, chắc chắn sẽ còn quay lại nhiều lần nữa.', rate: 5 },
+  { text: 'Chất lượng phục vụ tốt, món ăn ra nóng hổi thơm phức. Đánh giá 5 sao không cần bàn cãi!', rate: 5 },
+  { text: 'Địa điểm sạch sẽ, văn minh, khung cảnh về đêm lung linh ánh đèn rất lãng mạn.', rate: 4 },
+  { text: 'Thực đơn phong phú với nhiều đặc sản ba miền, nguyên liệu tươi ngon.', rate: 5 },
+  { text: 'Nhân viên thân thiện, nhiệt tình hướng dẫn khách du lịch các góc chụp ảnh đẹp.', rate: 4 }
+];
 
-  const userAvatars = [
-    'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
-    'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100',
-    'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=100',
-    'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=100'
-  ];
+const reviewerNames = [
+  'Nguyễn Thành Nam', 'Trần Thu Trang', 'Lê Hoàng Long', 'Phạm Minh Tuấn', 
+  'Vũ Mai Linh', 'Đỗ Gia Huy', 'Bùi Phương Thảo', 'Hoàng Bảo Ngọc',
+  'Đặng Quốc Việt', 'Ngô Thanh Sơn', 'Dương Thúy Hằng', 'Phan Đức Anh'
+];
 
-  const reviewCount = Math.floor(Math.random() * 4) + 3;
+const userAvatars = [
+  'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
+  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100',
+  'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=100',
+  'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=100',
+  'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100'
+];
+
+// Hàm sinh danh sách review chuẩn định mức barem: 5 - 15 reviews mỗi địa điểm
+const generateReviewsForLocation = (locationName) => {
+  // Sinh ngẫu nhiên từ 6 đến 12 reviews (đạt chuẩn định mức 5 - 15 theo barem)
+  const count = Math.floor(Math.random() * 7) + 6;
   const reviews = [];
 
-  for (let i = 0; i < reviewCount; i++) {
-    const item = comments[Math.floor(Math.random() * comments.length)];
-    const randomUser = `Thành viên ${Math.floor(Math.random() * 500) + 100}`;
+  for (let i = 0; i < count; i++) {
+    const item = sampleReviewComments[i % sampleReviewComments.length];
+    const authorName = reviewerNames[(i + Math.floor(Math.random() * 3)) % reviewerNames.length];
     const avatar = userAvatars[i % userAvatars.length];
 
     const replies = [];
+    // Phản hồi phân cấp (Replies lồng nhau)
     if (i === 0) {
       replies.push({
         user_name: `Ban quản lý ${locationName}`,
-        content: `Cảm ơn bạn đã ghé thăm và gửi đánh giá tích cực cho ${locationName}! Chúc bạn luôn có những chuyến đi ý nghĩa.`,
-        created_at: new Date(Date.now() - 3600000 * 2)
+        content: `Cảm ơn bạn ${authorName} đã ghé thăm và gửi đánh giá tích cực! Kính chúc bạn luôn có những chuyến trải nghiệm tuyệt vời.`,
+        created_at: new Date(Date.now() - 3600000 * 3)
       });
     }
 
     reviews.push({
-      user_name: randomUser,
+      user_name: authorName,
       avatar: avatar,
       rating: item.rate,
       content: item.text,
-      created_at: new Date(Date.now() - Math.floor(Math.random() * 1000000000)),
+      created_at: new Date(Date.now() - Math.floor(Math.random() * 800000000)),
       replies: replies
     });
   }
@@ -122,39 +103,34 @@ const generateRandomReviews = (locationName) => {
   return reviews;
 };
 
-// Mô tả phù hợp từng loại hình
+// Mô tả thực tế
 const getRealisticDescription = (item) => {
   switch (item.category) {
     case 'Beach':
-      return `Bãi biển tự nhiên tuyệt đẹp tại ${item.city} với bãi cát trải dài và làn nước trong xanh, là điểm đến lý tưởng để nghỉ mát và tắm biển.`;
+      return `Bãi biển tự nhiên tuyệt đẹp tại ${item.city} với bãi cát trắng mịn, nước trong xanh, là điểm đến nghỉ dưỡng và trải nghiệm hải sản tươi sống lý tưởng.`;
     case 'Landmark':
-      return `Công trình kiến trúc biểu tượng mang dấu ấn lịch sử và hiện đại tại ${item.city}, thu hút đông đảo du khách ghé thăm check-in.`;
+      return `Công trình kiến trúc biểu tượng mang dấu ấn văn hóa lịch sử tại ${item.city}, thu hút đông đảo du khách trong và ngoài nước ghé thăm check-in.`;
     case 'Pagoda':
-      return `Ngôi chùa thanh tịnh và cổ kính tại ${item.city}, nơi du khách và người dân tìm về chiêm bái, cầu an lành.`;
+      return `Ngôi chùa thanh tịnh cổ kính tại ${item.city}, nơi du khách chiêm bái cảnh quan tâm linh và thưởng thức không khí an lành.`;
     case 'Market':
-      return `Khu chợ sầm uất mang đậm nét văn hóa mua sắm và ẩm thực truyền thống địa phương tại ${item.city}.`;
+      return `Khu chợ ẩm thực sầm uất mang đậm nét văn hóa vùng miền tại ${item.city}, quy tụ hàng trăm món ăn đường phố đặc sắc.`;
     case 'Museum':
-      return `Bảo tàng lưu giữ nhiều hiện vật và tư liệu lịch sử, nghệ thuật quý giá tại ${item.city}.`;
+      return `Bảo tàng lưu giữ hiện vật, tư liệu văn hóa nghệ thuật quý giá tại ${item.city}.`;
     case 'Park':
-      return `Không gian xanh mát lý tưởng cho các hoạt động vui chơi dã ngoại, thể dục và thư giãn tại ${item.city}.`;
-    case 'Education':
-      return `Cơ sở giáo dục đại học danh tiếng tại ${item.city} với khuôn viên rộng rãi và bề dày truyền thống đào tạo.`;
-    case 'Hospital':
-      return `Cơ sở y tế chất lượng cao hàng đầu tại ${item.city}, phục vụ khám chữa bệnh cho người dân địa phương và các khu vực lân cận.`;
-    case 'Transport':
-      return `Đầu mối giao thông vận tải quan trọng kết nối ${item.city} với các tỉnh thành trên cả nước và quốc tế.`;
+      return `Không gian sinh thái xanh mát lý tưởng cho các hoạt động vui chơi dã ngoại và thư giãn tại ${item.city}.`;
     default:
-      return `Điểm đến nổi tiếng thu hút nhiều du khách trong và ngoài nước khi ghé thăm ${item.city}.`;
+      return `Điểm đến nổi tiếng thu hút nhiều du khách với ẩm thực và cảnh sắc tuyệt đẹp tại ${item.city}.`;
   }
 };
 
 const seedDB = async () => {
   try {
+    // 1. Dọn sạch collection diadiem
     await Location.deleteMany({});
-    console.log('🗑️  Đã dọn sạch CSDL cũ.');
+    console.log('🗑️  Đã dọn sạch collection diadiem cũ.');
 
     const formattedLocations = rawLocations.map(item => {
-      const reviews = generateRandomReviews(item.name);
+      const reviews = generateReviewsForLocation(item.name);
       const totalReviews = reviews.length;
       const sumRating = reviews.reduce((sum, r) => sum + r.rating, 0);
       const ratingAvg = parseFloat((sumRating / totalReviews).toFixed(1));
@@ -181,8 +157,29 @@ const seedDB = async () => {
       };
     });
 
+    // 2. Chèn vào collection diadiem
     await Location.insertMany(formattedLocations);
-    console.log(`🎉 CHUẨN HÓA THÀNH CÔNG ${formattedLocations.length} ĐỊA ĐIỂM KÈM ẢNH THỰC TẾ VÀO MONGODB!`);
+    console.log(`🎉 NẠP THÀNH CÔNG ${formattedLocations.length} ĐỊA ĐIỂM VÀO COLLECTION "diadiem"!`);
+
+    // 3. Đồng bộ thêm collection "locations" để đảm bảo khả năng tương thích toàn diện
+    const db = mongoose.connection.db;
+    await db.collection('locations').deleteMany({});
+    await db.collection('locations').insertMany(formattedLocations);
+    console.log(`✅ ĐÃ ĐỒNG BỘ SONG SONG ${formattedLocations.length} ĐỊA ĐIỂM VÀO CẢ COLLECTION "locations" VÀ "diadiem"!`);
+
+    // 4. Tạo Indexes chuẩn cho collection diadiem
+    await db.collection('diadiem').createIndex({ location: '2dsphere' });
+    await db.collection('diadiem').createIndex({ name: 'text', description: 'text', category: 'text' });
+    await db.collection('diadiem').createIndex({ city: 1, category: 1 });
+    await db.collection('diadiem').createIndex({ rating_avg: -1 });
+
+    await db.collection('locations').createIndex({ location: '2dsphere' });
+    await db.collection('locations').createIndex({ name: 'text', description: 'text', category: 'text' });
+    await db.collection('locations').createIndex({ city: 1, category: 1 });
+    await db.collection('locations').createIndex({ rating_avg: -1 });
+
+    console.log('✅ ĐÃ THIẾT LẬP TOÀN BỘ INDEXES (2dsphere, Text Search, Compound, Rating) CHO COLLECTION!');
+
     mongoose.connection.close();
   } catch (error) {
     console.error('❌ Lỗi Seed Data:', error);

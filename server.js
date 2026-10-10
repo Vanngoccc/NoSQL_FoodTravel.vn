@@ -241,9 +241,6 @@ app.post('/api/locations/:id/reviews', async (req, res) => {
       return res.status(400).json({ error: 'Vui lòng nhập tên, số sao đánh giá và nội dung review' });
     }
 
-    const loc = await Location.findById(locationId);
-    if (!loc) return res.status(404).json({ error: 'Không tìm thấy địa điểm' });
-
     const newReview = {
       user_name,
       rating: Number(rating),
@@ -253,16 +250,51 @@ app.post('/api/locations/:id/reviews', async (req, res) => {
       replies: []
     };
 
-    loc.reviews.unshift(newReview);
-    loc.total_reviews = loc.reviews.length;
-    const sum = loc.reviews.reduce((acc, r) => acc + r.rating, 0);
-    loc.rating_avg = parseFloat((sum / loc.total_reviews).toFixed(1));
+    // 1. Thao tác nguyên tử ($push) chuẩn MongoDB Document Store hỗ trợ ghi đồng thời cao
+    const loc = await Location.findByIdAndUpdate(
+      locationId,
+      {
+        $push: {
+          reviews: {
+            $each: [newReview],
+            $position: 0
+          }
+        }
+      },
+      { new: true }
+    );
 
-    await loc.save();
+    if (!loc) return res.status(404).json({ error: 'Không tìm thấy địa điểm' });
+
+    // 2. Aggregation Pipeline thời gian thực (Barem SV2 Đề tài 04):
+    // Tự động tính toán lại Rating Average và Total Reviews của địa điểm từ mảng reviews
+    const aggResult = await Location.aggregate([
+      { $match: { _id: loc._id } },
+      { $unwind: '$reviews' },
+      {
+        $group: {
+          _id: '$_id',
+          calculated_avg: { $avg: '$reviews.rating' },
+          calculated_total: { $sum: 1 }
+        }
+      }
+    ]);
+
+    let newAvg = loc.rating_avg;
+    let newTotal = loc.reviews.length;
+    if (aggResult && aggResult.length > 0) {
+      newAvg = parseFloat(aggResult[0].calculated_avg.toFixed(1));
+      newTotal = aggResult[0].calculated_total;
+      await Location.findByIdAndUpdate(loc._id, {
+        rating_avg: newAvg,
+        total_reviews: newTotal
+      });
+    }
+
     res.status(201).json({
       message: 'Đăng đánh giá thành công',
-      rating_avg: loc.rating_avg,
-      total_reviews: loc.total_reviews,
+      rating_avg: newAvg,
+      total_reviews: newTotal,
       review: loc.reviews[0]
     });
   } catch (err) {

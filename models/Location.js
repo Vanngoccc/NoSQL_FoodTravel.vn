@@ -18,7 +18,7 @@ const reviewSchema = new mongoose.Schema({
   replies: [replySchema]
 });
 
-// 3. Schema chính cho Địa điểm (Location)
+// 3. Schema chính cho Địa điểm (Location) - Collection "diadiem"
 const locationSchema = new mongoose.Schema({
   custom_id: { type: Number },
   name: { type: String, required: true, trim: true },
@@ -38,10 +38,11 @@ const locationSchema = new mongoose.Schema({
   reviews: [reviewSchema]
 }, { timestamps: true });
 
-// Đánh Indexes phục vụ tìm kiếm nâng cao (SV2 Barem)
+// Đánh Indexes phục vụ tìm kiếm nâng cao (SV2 Barem Đề tài 04)
 locationSchema.index({ location: '2dsphere' });
 locationSchema.index({ name: 'text', description: 'text', category: 'text' });
 locationSchema.index({ city: 1, category: 1 });
 locationSchema.index({ rating_avg: -1 });
 
-module.exports = mongoose.model('Location', locationSchema);
+// Khai báo rõ ràng Collection "diadiem" theo đúng barem yêu cầu
+module.exports = mongoose.model('Location', locationSchema, 'diadiem');
