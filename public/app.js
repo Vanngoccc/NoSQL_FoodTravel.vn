@@ -1,6 +1,7 @@
 // =====================================================================
 // FoodTravel.vn Frontend Application Logic
 // Mạng xã hội Ẩm thực & Du lịch Việt Nam (Chuẩn Figma 1541127234113621997)
+// Toàn bộ Tài khoản, Đánh giá, Tim/Like và Thống kê lưu trên MONGODB
 // =====================================================================
 
 let allLocations = [];
@@ -13,45 +14,159 @@ let activeLocationId = null;
 let currentPage = 1;
 const itemsPerPage = 12;
 
-// Trạng thái yêu thích (Likes lưu trong localStorage)
-let likedPosts = JSON.parse(localStorage.getItem('foodtravel_likes') || '{}');
+// Trạng thái modal Auth (login hoặc register)
+let authMode = 'login';
 
-// Danh sách tác giả cộng đồng giả lập cho bài viết sinh động chuẩn mạng xã hội
-const communityAuthors = [
-  { name: 'Huỳnh Văn Ngọc', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120' },
-  { name: 'Thanh Trúc', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120' },
-  { name: 'Minh Tuấn', avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=120' },
-  { name: 'Lan Anh Foodie', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=120' },
-  { name: 'Hoàng Long Travel', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120' }
-];
-
-// Người dùng hiện tại
+// Người dùng hiện tại (Lấy từ MongoDB session)
 let currentUser = localStorage.getItem('foodtravel_user') ? JSON.parse(localStorage.getItem('foodtravel_user')) : null;
+
+// Nếu chưa có, tự động kết nối tài khoản mặc định của bạn (Huỳnh Văn Ngọc) trong MongoDB
+if (!currentUser) {
+  currentUser = {
+    name: 'Huỳnh Văn Ngọc',
+    email: 'vanngoc@foodtravel.vn',
+    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+    bio: 'Trưởng nhóm đồ án NoSQL Đề tài 04 - Đam mê khám phá ẩm thực ba miền và du lịch phượt.',
+    saved_locations: []
+  };
+  localStorage.setItem('foodtravel_user', JSON.stringify(currentUser));
+}
+
+// Kiểm tra xem địa điểm có nằm trong danh sách đã lưu của người dùng hay không
+function isLocationSaved(locId) {
+  if (!currentUser || !currentUser.saved_locations || !locId) return false;
+  return currentUser.saved_locations.some(item => {
+    if (!item) return false;
+    const id = typeof item === 'object' ? item._id : item;
+    return id && id.toString() === locId.toString();
+  });
+}
+
+// Đồng bộ thông tin người dùng mới nhất từ MongoDB (bao gồm saved_locations)
+async function syncCurrentUserFromDB() {
+  if (!currentUser || !currentUser.email) return;
+  try {
+    const res = await fetch(`/api/auth/me?email=${encodeURIComponent(currentUser.email)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.user) {
+        currentUser = { ...currentUser, ...data.user };
+        localStorage.setItem('foodtravel_user', JSON.stringify(currentUser));
+        updateUserUI();
+      }
+    }
+  } catch (e) {
+    console.error('Lỗi sync user từ MongoDB:', e);
+  }
+}
 
 // Khởi chạy khi load trang
 document.addEventListener('DOMContentLoaded', () => {
   updateUserUI();
+  syncCurrentUserFromDB();
+  fetchHeroOverviewStats();
+  fetchStories();
   fetchLocations();
   fetchSidebarTopRated();
+  initStarRatingComponent();
 });
 
-// Cập nhật giao diện Đăng nhập / Tài khoản người dùng
+// =====================================================================
+// 1. ĐỒNG BỘ SỐ LIỆU HERO VÀ TỔNG QUAN TỪ MONGODB
+// =====================================================================
+async function fetchHeroOverviewStats() {
+  try {
+    const res = await fetch('/api/stats/overview');
+    const data = await res.json();
+
+    // Đồng bộ trực tiếp 4 con số Hero Banner từ MongoDB (Đã tách riêng Bài viết và Đánh giá)
+    const elUsers = document.getElementById('heroTotalUsers');
+    const elLocations = document.getElementById('heroTotalLocations');
+    const elReviews = document.getElementById('heroTotalReviews');
+    const elCities = document.getElementById('heroTotalCities');
+
+    if (elUsers) elUsers.textContent = data.total_users || 60;
+    if (elLocations) elLocations.textContent = data.total_locations || 100;
+    if (elReviews) elReviews.textContent = (data.total_reviews || 854).toLocaleString('vi-VN');
+    if (elCities) elCities.textContent = data.total_cities || 3;
+
+    // Cập nhật tab thống kê
+    const statLocs = document.getElementById('statTotalLocations');
+    const statRevs = document.getElementById('statTotalReviews');
+    const statAvg = document.getElementById('statAvgRating');
+    if (statLocs) statLocs.textContent = data.total_locations || 100;
+    if (statRevs) statRevs.textContent = (data.total_reviews || 854).toLocaleString('vi-VN');
+    if (statAvg) statAvg.textContent = `${data.avg_rating || 4.7} ⭐`;
+
+    // Cập nhật Widget Chủ đề thịnh hành (Trending Tags) đồng bộ từ MongoDB
+    if (data.trending_tags) {
+      renderTrendingTags(data.trending_tags);
+    }
+  } catch (err) {
+    console.error('Lỗi tải thống kê MongoDB:', err);
+  }
+}
+
+function renderTrendingTags(tags) {
+  const container = document.getElementById('trendingTagsContainer');
+  if (!container || !tags || tags.length === 0) return;
+
+  container.innerHTML = tags.map(t => `
+    <div onclick="filterByTag('${t.type}', '${t.keyword}')" class="flex items-center justify-between p-2.5 rounded-2xl hover:bg-slate-50 transition-all cursor-pointer group">
+      <div>
+        <div class="flex items-center space-x-1.5">
+          <span class="text-sm font-bold text-slate-800 group-hover:text-[#FF5422] transition-colors">${t.tag}</span>
+          <span class="text-[10px] px-1.5 py-0.5 rounded-md bg-orange-50 text-[#FF5422] font-semibold">${t.label}</span>
+        </div>
+        <p class="text-[11px] text-slate-400 mt-0.5">${t.subtext}</p>
+      </div>
+      <i class="fa-solid fa-arrow-up-right-from-square text-xs text-slate-300 group-hover:text-[#FF5422] transition-colors"></i>
+    </div>
+  `).join('');
+}
+
+function filterByTag(type, keyword) {
+  if (type === 'city') {
+    document.getElementById('filterCity').value = keyword;
+    currentCategoryFilter = 'ALL';
+    updateCategoryChipsUI();
+  } else if (type === 'category') {
+    document.getElementById('filterCity').value = 'ALL';
+    currentCategoryFilter = keyword;
+    updateCategoryChipsUI();
+  }
+  fetchLocations();
+  scrollToContent();
+}
+
+// =====================================================================
+// 2. QUẢN LÝ TÀI KHOẢN NGƯỜI DÙNG & TRANG CÁ NHÂN (MONGODB)
+// =====================================================================
 function updateUserUI() {
   const section = document.getElementById('userAccountSection');
+  const composerAvatar = document.getElementById('composerUserAvatar');
   if (!section) return;
 
   if (currentUser) {
+    if (composerAvatar) composerAvatar.src = currentUser.avatar;
+
     section.innerHTML = `
-      <div class="flex items-center space-x-2 bg-[#FF5422]/10 text-slate-800 px-3 py-1.5 rounded-full border border-[#FF5422]/20 text-xs font-bold">
-        <i class="fa-solid fa-circle-user text-[#FF5422] text-sm"></i>
-        <span>${currentUser.name}</span>
-        <button onclick="logoutUser()" class="ml-1 text-slate-400 hover:text-rose-600 cursor-pointer" title="Đăng xuất">
-          <i class="fa-solid fa-arrow-right-from-bracket"></i>
-        </button>
+      <div class="flex items-center space-x-2 bg-slate-50 hover:bg-slate-100 pl-1.5 pr-3 py-1 rounded-full border border-slate-200 transition-all cursor-pointer" onclick="openProfileModal()">
+        <img src="${currentUser.avatar}" alt="${currentUser.name}" class="w-7 h-7 rounded-full object-cover border border-[#FF5422]">
+        <span class="text-xs font-bold text-slate-800 hidden sm:inline">${currentUser.name}</span>
       </div>
+      <button onclick="openProfileModal()" class="px-3 py-1.5 rounded-full text-xs font-bold text-[#FF5422] bg-[#FF5422]/10 hover:bg-[#FF5422] hover:text-white transition-all cursor-pointer" title="Trang cá nhân">
+        <i class="fa-solid fa-user-gear"></i>
+      </button>
     `;
+
+    // Cập nhật form viết đánh giá
     const inputUser = document.getElementById('inputReviewUser');
+    const avatarUser = document.getElementById('reviewUserAvatar');
+    const authStatus = document.getElementById('reviewAuthStatus');
     if (inputUser) inputUser.value = currentUser.name;
+    if (avatarUser) avatarUser.src = currentUser.avatar;
+    if (authStatus) authStatus.innerHTML = `<i class="fa-solid fa-circle-check"></i> <span>Tài khoản: ${currentUser.name}</span>`;
   } else {
     section.innerHTML = `
       <button onclick="openAuthModal('login')" class="px-3 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 transition-colors cursor-pointer">
@@ -64,36 +179,330 @@ function updateUserUI() {
   }
 }
 
-function openAuthModal(type) {
+function openAuthModal(mode = 'login') {
+  authMode = mode;
   const title = document.getElementById('authModalTitle');
-  if (title) title.textContent = type === 'login' ? 'Đăng nhập tài khoản' : 'Đăng ký tài khoản mới';
+  const nameContainer = document.getElementById('authNameFieldContainer');
+  const switchBtn = document.getElementById('authSwitchBtn');
+
+  if (mode === 'login') {
+    if (title) title.textContent = 'Đăng nhập tài khoản';
+    if (nameContainer) nameContainer.classList.add('hidden');
+    if (switchBtn) switchBtn.textContent = 'Chưa có tài khoản? Đăng ký ngay';
+  } else {
+    if (title) title.textContent = 'Đăng ký tài khoản mới';
+    if (nameContainer) nameContainer.classList.remove('hidden');
+    if (switchBtn) switchBtn.textContent = 'Đã có tài khoản? Đăng nhập ngay';
+  }
+
   document.getElementById('authModal').classList.remove('hidden');
+}
+
+function toggleAuthMode() {
+  openAuthModal(authMode === 'login' ? 'register' : 'login');
 }
 
 function closeAuthModal() {
   document.getElementById('authModal').classList.add('hidden');
 }
 
-function handleAuthSubmit() {
-  const name = document.getElementById('authUserName').value.trim();
+// Xử lý đăng nhập / đăng ký kết nối trực tiếp với MongoDB
+async function handleAuthSubmit() {
   const email = document.getElementById('authUserEmail').value.trim();
+  const name = document.getElementById('authUserName').value.trim();
 
-  if (!name) {
-    alert('Vui lòng nhập họ và tên của bạn!');
+  if (!email) {
+    alert('Vui lòng nhập email đăng nhập!');
     return;
   }
 
-  currentUser = { name, email: email || `${name.toLowerCase().replace(/\s+/g, '')}@gmail.com` };
-  localStorage.setItem('foodtravel_user', JSON.stringify(currentUser));
-  updateUserUI();
-  closeAuthModal();
-  alert(`Chào mừng ${name} đến với FoodTravel.vn!`);
+  try {
+    let endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
+    let body = { email };
+    if (authMode === 'register') {
+      if (!name) {
+        alert('Vui lòng nhập họ và tên của bạn!');
+        return;
+      }
+      body.name = name;
+    }
+
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      currentUser = data.user;
+      localStorage.setItem('foodtravel_user', JSON.stringify(currentUser));
+      updateUserUI();
+      closeAuthModal();
+      fetchHeroOverviewStats();
+      alert(`Xin chào ${currentUser.name}! Tài khoản của bạn đã được kết nối với MongoDB.`);
+    } else {
+      alert('Thông báo: ' + data.error);
+    }
+  } catch (err) {
+    console.error('Lỗi xác thực:', err);
+  }
 }
 
 function logoutUser() {
   currentUser = null;
   localStorage.removeItem('foodtravel_user');
   updateUserUI();
+  closeProfileModal();
+  alert('Đã đăng xuất tài khoản.');
+}
+
+// Modal Trang cá nhân (User Profile)
+async function openProfileModal() {
+  if (!currentUser) {
+    openAuthModal('login');
+    return;
+  }
+
+  const modal = document.getElementById('userProfileModal');
+  document.getElementById('profileModalAvatar').src = currentUser.avatar;
+  document.getElementById('profileModalName').textContent = currentUser.name;
+  document.getElementById('profileModalEmail').textContent = currentUser.email;
+  document.getElementById('profileModalBio').textContent = currentUser.bio || 'Thành viên FoodTravel.vn';
+
+  // Đồng bộ thông tin và các bài đánh giá do user viết từ MongoDB
+  try {
+    let userData = null;
+    let userReviews = [];
+
+    // Tìm profile theo ID hoặc Email
+    if (currentUser._id) {
+      const res = await fetch(`/api/auth/profile/${currentUser._id}`);
+      if (res.ok) {
+        const data = await res.json();
+        userData = data.user;
+        userReviews = data.reviews || [];
+      }
+    }
+    if (!userData && currentUser.email) {
+      const res = await fetch(`/api/auth/me?email=${encodeURIComponent(currentUser.email)}`);
+      if (res.ok) {
+        const data = await res.json();
+        userData = data.user;
+        if (userData && userData._id) {
+          currentUser._id = userData._id;
+          const resProf = await fetch(`/api/auth/profile/${userData._id}`);
+          if (resProf.ok) {
+            const profData = await resProf.json();
+            userReviews = profData.reviews || [];
+          }
+        }
+      }
+    }
+
+    if (userData) {
+      currentUser = { ...currentUser, ...userData };
+      localStorage.setItem('foodtravel_user', JSON.stringify(currentUser));
+
+      const revCountEl = document.getElementById('profileReviewCount');
+      const savedCountEl = document.getElementById('profileSavedCount');
+      const savedBadgeEl = document.getElementById('profileSavedBadge');
+
+      if (revCountEl) revCountEl.textContent = userReviews.length;
+      const savedList = userData.saved_locations || [];
+      if (savedCountEl) savedCountEl.textContent = savedList.length;
+      if (savedBadgeEl) {
+        savedBadgeEl.textContent = savedList.length;
+        if (savedList.length > 0) savedBadgeEl.classList.remove('hidden');
+        else savedBadgeEl.classList.add('hidden');
+      }
+
+      // Render danh sách đánh giá đã viết
+      const listEl = document.getElementById('profileReviewsList');
+      if (listEl) {
+        if (userReviews.length === 0) {
+          listEl.innerHTML = '<div class="text-xs text-slate-400 text-center py-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200">Bạn chưa viết đánh giá nào.</div>';
+        } else {
+          listEl.innerHTML = userReviews.map(r => `
+            <div class="p-2.5 bg-slate-50 hover:bg-slate-100/80 rounded-2xl border border-slate-200/80 text-xs transition-colors cursor-pointer" onclick="closeProfileModal(); openLocationModal('${r.location_id}')">
+              <div class="flex items-center justify-between font-bold text-slate-800">
+                <span class="truncate text-slate-900 font-extrabold hover:text-[#FF5422]">${r.location_name}</span>
+                <span class="text-amber-500 font-extrabold shrink-0">⭐ ${r.rating}</span>
+              </div>
+              <p class="text-[11px] text-slate-500 mt-1 line-clamp-2">${r.content}</p>
+            </div>
+          `).join('');
+        }
+      }
+
+      // Render danh sách địa điểm đã lưu
+      renderSavedLocationsList(savedList);
+    }
+
+    // Lấy tất cả tin nhắn phản hồi từ các story của người dùng
+    if (currentUser.email) {
+      const resReplies = await fetch(`/api/stories/my-replies/${encodeURIComponent(currentUser.email)}`);
+      const repliesData = await resReplies.json();
+      const msgListEl = document.getElementById('profileStoryRepliesList');
+      const badgeEl = document.getElementById('profileMessagesBadge');
+
+      if (badgeEl) {
+        if (repliesData && repliesData.length > 0) {
+          badgeEl.textContent = repliesData.length;
+          badgeEl.classList.remove('hidden');
+        } else {
+          badgeEl.classList.add('hidden');
+        }
+      }
+
+      if (msgListEl) {
+        if (!repliesData || repliesData.length === 0) {
+          msgListEl.innerHTML = '<div class="text-xs text-slate-400 text-center py-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200">Chưa có ai gửi tin nhắn đến khoảnh khắc của bạn.</div>';
+        } else {
+          msgListEl.innerHTML = repliesData.map(msg => `
+            <div class="p-2.5 bg-orange-50/50 rounded-xl border border-orange-100 text-xs space-y-1">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-1.5 font-bold text-slate-800">
+                  <img src="${msg.user_avatar}" class="w-5 h-5 rounded-full object-cover">
+                  <span>${msg.user_name}</span>
+                </div>
+                <span class="text-[10px] text-slate-500 font-medium">${formatMessageTime(msg.created_at)}</span>
+              </div>
+              <p class="text-[11px] text-slate-700 font-medium">"${msg.message}"</p>
+              <div class="text-[10px] text-[#FF5422] font-semibold flex items-center space-x-1">
+                <i class="fa-solid fa-camera text-[9px]"></i>
+                <span>Khoảnh khắc: ${msg.location_name}</span>
+              </div>
+            </div>
+          `).join('');
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Lỗi tải profile data:', e);
+  }
+
+  switchProfileTab('reviews');
+  modal.classList.remove('hidden');
+}
+
+// Render danh sách địa điểm đã lưu trong trang cá nhân
+function renderSavedLocationsList(savedLocs) {
+  const container = document.getElementById('profileSavedList');
+  if (!container) return;
+
+  if (!savedLocs || savedLocs.length === 0) {
+    container.innerHTML = `
+      <div class="py-6 text-center text-slate-400 space-y-2 bg-slate-50 rounded-2xl p-4 border border-dashed border-slate-200">
+        <i class="fa-regular fa-bookmark text-2xl text-amber-500/60"></i>
+        <p class="text-xs font-bold text-slate-700">Chưa có địa điểm đã lưu</p>
+        <p class="text-[11px] text-slate-400 max-w-xs mx-auto">Nhấn biểu tượng 🔖 Lưu trên các bài viết để lưu lại các địa điểm yêu thích nhé!</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = savedLocs.map(item => {
+    const locId = item._id || item;
+    const locName = item.name || 'Địa điểm yêu thích';
+    const locCity = item.city || '';
+    const locCategory = item.category || 'Địa danh';
+    const locImg = (item.images && item.images.length > 0) ? item.images[0] : 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=200';
+    const locRating = item.rating_avg ? item.rating_avg.toFixed(1) : '5.0';
+
+    return `
+      <div class="p-2.5 bg-slate-50 hover:bg-slate-100/80 rounded-2xl border border-slate-200/80 text-xs flex items-center justify-between gap-2.5 transition-colors group">
+        <div class="flex items-center space-x-2.5 min-w-0 flex-1 cursor-pointer" onclick="closeProfileModal(); openLocationModal('${locId}')">
+          <img src="${locImg}" class="w-12 h-12 rounded-xl object-cover shrink-0 border border-slate-200 shadow-2xs">
+          <div class="min-w-0 flex-1">
+            <h5 class="text-xs font-bold text-slate-900 truncate group-hover:text-[#FF5422] transition-colors">${locName}</h5>
+            <div class="flex items-center space-x-1.5 text-[10px] text-slate-500 mt-0.5">
+              <span>${locCity}</span>
+              <span>•</span>
+              <span class="text-[#FF5422] font-semibold">${locCategory}</span>
+              <span>•</span>
+              <span class="text-amber-500 font-bold flex items-center space-x-0.5">
+                <i class="fa-solid fa-star text-[9px]"></i>
+                <span>${locRating}</span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-1 shrink-0">
+          <button onclick="closeProfileModal(); openLocationModal('${locId}')" class="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-[#FF5422] hover:text-[#FF5422] text-[10px] font-bold text-slate-700 transition-all cursor-pointer shadow-2xs" title="Xem chi tiết">
+            Xem
+          </button>
+          <button onclick="toggleSaveLocation('${locId}', event)" class="w-7 h-7 rounded-lg bg-white border border-slate-200 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 text-slate-400 flex items-center justify-center text-xs transition-all cursor-pointer shadow-2xs" title="Bỏ lưu địa điểm này">
+            <i class="fa-solid fa-trash-can text-[11px]"></i>
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function switchProfileTab(tab) {
+  const btnReviews = document.getElementById('btnProfileTabReviews');
+  const btnSaved = document.getElementById('btnProfileTabSaved');
+  const btnMessages = document.getElementById('btnProfileTabMessages');
+  const listReviews = document.getElementById('profileReviewsList');
+  const listSaved = document.getElementById('profileSavedList');
+  const listMessages = document.getElementById('profileStoryRepliesList');
+
+  const defaultTabClass = 'text-xs font-semibold text-slate-400 hover:text-slate-700 pb-1 cursor-pointer transition-colors flex items-center space-x-1.5';
+  const activeTabClass = 'text-xs font-bold text-[#FF5422] border-b-2 border-[#FF5422] pb-1 cursor-pointer transition-colors flex items-center space-x-1.5';
+
+  if (btnReviews) btnReviews.className = defaultTabClass.replace('flex items-center space-x-1.5', '');
+  if (btnSaved) btnSaved.className = defaultTabClass;
+  if (btnMessages) btnMessages.className = defaultTabClass;
+
+  if (listReviews) listReviews.classList.add('hidden');
+  if (listSaved) listSaved.classList.add('hidden');
+  if (listMessages) listMessages.classList.add('hidden');
+
+  if (tab === 'reviews') {
+    if (btnReviews) btnReviews.className = 'text-xs font-bold text-[#FF5422] border-b-2 border-[#FF5422] pb-1 cursor-pointer transition-colors';
+    if (listReviews) listReviews.classList.remove('hidden');
+  } else if (tab === 'saved') {
+    if (btnSaved) btnSaved.className = activeTabClass;
+    if (listSaved) {
+      listSaved.classList.remove('hidden');
+      renderSavedLocationsList(currentUser ? currentUser.saved_locations : []);
+    }
+  } else if (tab === 'messages') {
+    if (btnMessages) btnMessages.className = activeTabClass;
+    if (listMessages) listMessages.classList.remove('hidden');
+  }
+}
+
+function closeProfileModal() {
+  document.getElementById('userProfileModal').classList.add('hidden');
+}
+
+async function promptChangeAvatar() {
+  const newAvatar = prompt('Nhập đường dẫn (URL) ảnh đại diện mới:', currentUser.avatar);
+  if (!newAvatar || newAvatar.trim() === '') return;
+
+  currentUser.avatar = newAvatar.trim();
+  localStorage.setItem('foodtravel_user', JSON.stringify(currentUser));
+  updateUserUI();
+  document.getElementById('profileModalAvatar').src = currentUser.avatar;
+
+  if (currentUser._id) {
+    await fetch(`/api/auth/profile/${currentUser._id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ avatar: newAvatar.trim() })
+    });
+  } else if (currentUser.email) {
+    await fetch('/api/auth/profile-by-email', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: currentUser.email, avatar: newAvatar.trim() })
+    });
+  }
+  if (typeof fetchStories === 'function') fetchStories();
 }
 
 // Cuộn mượt đến nội dung chính
@@ -104,7 +513,9 @@ function scrollToContent() {
   }
 }
 
-// 1. TẢI DANH SÁCH BÀI VIẾT / ĐỊA ĐIỂM TỪ BACKEND
+// =====================================================================
+// 3. TẢI DANH SÁCH BÀI VIẾT / ĐỊA ĐIỂM TỪ BACKEND
+// =====================================================================
 async function fetchLocations() {
   try {
     const searchVal = document.getElementById('searchInput').value.trim();
@@ -118,7 +529,7 @@ async function fetchLocations() {
 
     const res = await fetch(url);
     allLocations = await res.json();
-    currentPage = 1; // Reset về trang 1 khi lọc hoặc tìm kiếm
+    currentPage = 1;
 
     renderLocationsPage();
     if (mapInstance) {
@@ -129,7 +540,6 @@ async function fetchLocations() {
   }
 }
 
-// Tìm kiếm từ ô mobile
 function handleSearchMobile() {
   const mobileInput = document.getElementById('searchInputMobile');
   if (mobileInput) {
@@ -138,7 +548,6 @@ function handleSearchMobile() {
   }
 }
 
-// Tìm kiếm nhanh theo từ khóa xu hướng (Figma Trending Tags)
 function quickFilterKeyword(keyword) {
   document.getElementById('searchInput').value = keyword;
   currentCategoryFilter = 'ALL';
@@ -147,7 +556,9 @@ function quickFilterKeyword(keyword) {
   scrollToContent();
 }
 
-// 2. PHÂN TRANG & HIỂN THỊ POST CARDS CHUẨN MẠNG XÃ HỘI
+// =====================================================================
+// 4. PHÂN TRANG & HIỂN THỊ POST CARDS (TIM / LIKE LƯU TRỰC TIẾP TRÊN MONGODB)
+// =====================================================================
 function renderLocationsPage() {
   const container = document.getElementById('locationsGrid');
   const paginationBox = document.getElementById('paginationContainer');
@@ -166,26 +577,29 @@ function renderLocationsPage() {
     return;
   }
 
-  // Cắt mảng theo trang hiện tại (12 bài / trang)
   const startIndex = (currentPage - 1) * itemsPerPage;
   const pageItems = allLocations.slice(startIndex, startIndex + itemsPerPage);
 
   container.innerHTML = pageItems.map((loc, index) => {
-    const author = communityAuthors[index % communityAuthors.length];
     const imgUrl = (loc.images && loc.images.length > 0) ? loc.images[0] : 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800';
-    const isLiked = !!likedPosts[loc._id];
-    const initialLikes = 180 + (index * 23) % 450 + (isLiked ? 1 : 0);
+    const isLiked = loc.liked_by && currentUser ? loc.liked_by.includes(currentUser.email) : false;
+    const likesCount = loc.likes_count || 0;
+    const isSaved = isLocationSaved(loc._id);
+
+    // Lấy thông tin tác giả đánh giá thực tế từ MongoDB
+    const authorName = (loc.reviews && loc.reviews.length > 0) ? loc.reviews[0].user_name : 'Huỳnh Văn Ngọc';
+    const authorAvatar = (loc.reviews && loc.reviews.length > 0 && loc.reviews[0].avatar) ? loc.reviews[0].avatar : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100';
 
     return `
       <div class="bg-white rounded-3xl overflow-hidden border border-slate-200/80 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between group">
         <div>
-          <!-- Header Thẻ: Avatar Người đăng & Tỉnh thành -->
+          <!-- Header Thẻ: Người đăng & Tỉnh thành (Đồng bộ MongoDB) -->
           <div class="p-3.5 pb-2.5 flex items-center justify-between">
             <div class="flex items-center space-x-2.5">
-              <img src="${author.avatar}" alt="${author.name}" class="w-8 h-8 rounded-full object-cover border border-slate-100">
+              <img src="${authorAvatar}" class="w-8 h-8 rounded-full object-cover border border-slate-100">
               <div>
-                <h4 class="text-xs font-bold text-slate-900 leading-tight">${author.name}</h4>
-                <div class="flex items-center space-x-1 text-[10px] text-slate-400">
+                <h4 class="text-xs font-bold text-slate-900 leading-tight">${authorName}</h4>
+                <div onclick="flyToLocationOnMap('${loc._id}', event)" class="flex items-center space-x-1 text-[10px] text-slate-400 hover:text-[#FF5422] cursor-pointer transition-colors" title="Lia bản đồ tới ${loc.name}">
                   <i class="fa-solid fa-location-dot text-[#FF5422]"></i>
                   <span>${loc.city}</span>
                 </div>
@@ -197,9 +611,15 @@ function renderLocationsPage() {
             </span>
           </div>
 
-          <!-- Thumbnail Hình ảnh & Badge Sao -->
+          <!-- Thumbnail Hình ảnh, Nút Lưu nhanh & Badge Sao -->
           <div onclick="openLocationModal('${loc._id}')" class="relative h-48 sm:h-52 w-full overflow-hidden bg-slate-100 cursor-pointer">
             <img src="${imgUrl}" alt="${loc.name}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+            
+            <!-- Nút Lưu nhanh góc phải trên ảnh -->
+            <button onclick="toggleSaveLocation('${loc._id}', event)" id="badgeSaveCard_${loc._id}" class="absolute top-3 right-3 w-8 h-8 rounded-full ${isSaved ? 'bg-amber-500 text-white' : 'bg-slate-900/60 text-white hover:bg-slate-900/80'} backdrop-blur-md flex items-center justify-center transition-all shadow-md cursor-pointer hover:scale-110 z-10" title="${isSaved ? 'Bỏ lưu địa điểm' : 'Lưu địa điểm này'}">
+              <i class="${isSaved ? 'fa-solid' : 'fa-regular'} fa-bookmark text-xs"></i>
+            </button>
+
             <div class="absolute bottom-3 left-3 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-slate-900/75 backdrop-blur-md text-amber-400 flex items-center space-x-1 shadow-sm">
               <i class="fa-solid fa-star text-xs"></i>
               <span>${loc.rating_avg ? loc.rating_avg.toFixed(1) : '5.0'}</span>
@@ -219,19 +639,31 @@ function renderLocationsPage() {
           </div>
         </div>
 
-        <!-- Thanh tương tác mạng xã hội (Like, Bình luận, Lưu, Chi tiết) -->
+        <!-- Thanh tương tác: TIM/LIKE & LƯU & LIA BẢN ĐỒ -->
         <div class="p-3 sm:p-4 pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 bg-slate-50/40">
           <div class="flex items-center space-x-3">
-            <!-- Nút Like -->
-            <button onclick="toggleLikePost('${loc._id}', event)" id="btnLike_${loc._id}" class="flex items-center space-x-1.5 ${isLiked ? 'text-rose-600 font-bold' : 'text-slate-600 hover:text-rose-500'} transition-colors cursor-pointer">
+            <!-- Nút Like kết nối MongoDB -->
+            <button onclick="toggleLikePost('${loc._id}', event)" id="btnLike_${loc._id}" class="flex items-center space-x-1.5 ${isLiked ? 'text-rose-600 font-bold' : 'text-slate-600 hover:text-rose-500'} transition-colors cursor-pointer" title="Thích bài viết">
               <i class="${isLiked ? 'fa-solid text-rose-500' : 'fa-regular'} fa-heart text-sm"></i>
-              <span id="likeCount_${loc._id}">${initialLikes}</span>
+              <span id="likeCount_${loc._id}">${likesCount}</span>
             </button>
 
             <!-- Nút Bình luận -->
-            <button onclick="openLocationModal('${loc._id}')" class="flex items-center space-x-1.5 text-slate-600 hover:text-[#FF5422] transition-colors cursor-pointer">
+            <button onclick="openLocationModal('${loc._id}')" class="flex items-center space-x-1.5 text-slate-600 hover:text-[#FF5422] transition-colors cursor-pointer" title="Xem bình luận">
               <i class="fa-regular fa-comment text-sm"></i>
               <span>${loc.total_reviews || 0}</span>
+            </button>
+
+            <!-- Nút Lưu địa điểm (Bookmark MongoDB) -->
+            <button onclick="toggleSaveLocation('${loc._id}', event)" id="btnSaveCard_${loc._id}" class="flex items-center space-x-1.5 ${isSaved ? 'text-amber-600 font-bold' : 'text-slate-600 hover:text-amber-500'} transition-colors cursor-pointer" title="${isSaved ? 'Bỏ lưu địa điểm' : 'Lưu địa điểm này'}">
+              <i class="${isSaved ? 'fa-solid text-amber-500' : 'fa-regular'} fa-bookmark text-sm"></i>
+              <span class="hidden sm:inline">${isSaved ? 'Đã lưu' : 'Lưu'}</span>
+            </button>
+
+            <!-- Nút Lia bản đồ tới vị trí bài viết -->
+            <button onclick="flyToLocationOnMap('${loc._id}', event)" class="flex items-center space-x-1 text-slate-600 hover:text-[#FF5422] font-semibold transition-colors cursor-pointer" title="Lia bản đồ tới ${loc.name}">
+              <i class="fa-solid fa-map-location-dot text-sm text-[#FF5422]"></i>
+              <span class="hidden sm:inline">Bản đồ</span>
             </button>
           </div>
 
@@ -245,34 +677,55 @@ function renderLocationsPage() {
     `;
   }).join('');
 
-  // Vẽ thanh phân trang
   renderPagination(allLocations.length);
 }
 
-// Bật tắt trạng thái thích (Like)
-function toggleLikePost(locId, event) {
+// Bật tắt tim/like lưu trữ trực tiếp vào MongoDB
+async function toggleLikePost(locId, event) {
   event.stopPropagation();
-  const isLiked = !likedPosts[locId];
-  likedPosts[locId] = isLiked;
-  localStorage.setItem('foodtravel_likes', JSON.stringify(likedPosts));
+  if (!currentUser) {
+    openAuthModal('login');
+    return;
+  }
 
-  const btn = document.getElementById(`btnLike_${locId}`);
-  const countSpan = document.getElementById(`likeCount_${locId}`);
-  if (btn && countSpan) {
-    let currentVal = parseInt(countSpan.textContent) || 0;
-    if (isLiked) {
-      currentVal += 1;
-      btn.className = 'flex items-center space-x-1.5 text-rose-600 font-bold transition-colors cursor-pointer';
-      btn.innerHTML = `<i class="fa-solid fa-heart text-rose-500 text-sm"></i><span id="likeCount_${locId}">${currentVal}</span>`;
-    } else {
-      currentVal = Math.max(0, currentVal - 1);
-      btn.className = 'flex items-center space-x-1.5 text-slate-600 hover:text-rose-500 transition-colors cursor-pointer';
-      btn.innerHTML = `<i class="fa-regular fa-heart text-sm"></i><span id="likeCount_${locId}">${currentVal}</span>`;
+  try {
+    const res = await fetch(`/api/locations/${locId}/like`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_email: currentUser.email })
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      // Cập nhật trạng thái trong bộ nhớ và giao diện
+      const loc = allLocations.find(l => l._id === locId);
+      if (loc) {
+        loc.likes_count = data.likes_count;
+        if (!loc.liked_by) loc.liked_by = [];
+        if (data.isLiked) {
+          loc.liked_by.push(currentUser.email);
+        } else {
+          loc.liked_by = loc.liked_by.filter(e => e !== currentUser.email);
+        }
+      }
+
+      const btn = document.getElementById(`btnLike_${locId}`);
+      if (btn) {
+        if (data.isLiked) {
+          btn.className = 'flex items-center space-x-1.5 text-rose-600 font-bold transition-colors cursor-pointer';
+          btn.innerHTML = `<i class="fa-solid fa-heart text-rose-500 text-sm"></i><span id="likeCount_${locId}">${data.likes_count}</span>`;
+        } else {
+          btn.className = 'flex items-center space-x-1.5 text-slate-600 hover:text-rose-500 transition-colors cursor-pointer';
+          btn.innerHTML = `<i class="fa-regular fa-heart text-sm"></i><span id="likeCount_${locId}">${data.likes_count}</span>`;
+        }
+      }
     }
+  } catch (err) {
+    console.error('Lỗi thả tim MongoDB:', err);
   }
 }
 
-// Vẽ thanh phân trang
+// Phân trang
 function renderPagination(totalCount) {
   const container = document.getElementById('paginationContainer');
   if (!container) return;
@@ -315,7 +768,7 @@ function goToPage(page) {
   scrollToContent();
 }
 
-// 3. TÌM KIẾM & BỘ LỌC
+// 5. TÌM KIẾM & BỘ LỌC
 function handleSearch() {
   fetchLocations();
 }
@@ -353,7 +806,7 @@ function resetFilters() {
   fetchLocations();
 }
 
-// 4. CHUYỂN TAB XEM (BANNER CHỈ HIỂN THỊ Ở TAB KHÁM PHÁ THEO YÊU CẦU)
+// 6. CHUYỂN TAB XEM
 function switchView(viewName) {
   const vExplore = document.getElementById('viewExplore');
   const vMap = document.getElementById('viewMap');
@@ -378,18 +831,30 @@ function switchView(viewName) {
     btnExplore.className = 'px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all bg-white text-[#FF5422] shadow-xs flex items-center space-x-1 cursor-pointer';
   } else if (viewName === 'map') {
     vMap.classList.remove('hidden');
-    if (heroBanner) heroBanner.classList.add('hidden'); // Ẩn banner khi qua tab Bản đồ
+    if (heroBanner) heroBanner.classList.add('hidden');
     btnMap.className = 'px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all bg-white text-[#FF5422] shadow-xs flex items-center space-x-1 cursor-pointer';
     initLeafletMap();
+    setTimeout(() => {
+      if (mapInstance) {
+        mapInstance.invalidateSize();
+        mapInstance.fitBounds([[8.1, 102.0], [23.5, 109.8]], { padding: [15, 15] });
+        autoShowUserLocationOnMap();
+      }
+    }, 100);
+    setTimeout(() => {
+      if (mapInstance) {
+        mapInstance.invalidateSize();
+      }
+    }, 350);
   } else if (viewName === 'stats') {
     vStats.classList.remove('hidden');
-    if (heroBanner) heroBanner.classList.add('hidden'); // Ẩn banner khi qua tab Thống kê
+    if (heroBanner) heroBanner.classList.add('hidden');
     btnStats.className = 'px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all bg-white text-[#FF5422] shadow-xs flex items-center space-x-1 cursor-pointer';
     fetchAggregationStats();
   }
 }
 
-// 5. WIDGET SIDEBAR: TOP ĐỊA ĐIỂM ĐÁNH GIÁ CAO (AGGREGATION)
+// 7. WIDGET SIDEBAR: TOP ĐỊA ĐIỂM ĐÁNH GIÁ CAO (AGGREGATION)
 async function fetchSidebarTopRated() {
   const container = document.getElementById('sidebarTopRatedContainer');
   if (!container) return;
@@ -398,7 +863,6 @@ async function fetchSidebarTopRated() {
     const res = await fetch('/api/analytics/top-rated');
     const data = await res.json();
     
-    // Thu thập danh sách 4 địa điểm hàng đầu
     let list = [];
     data.forEach(group => {
       if (group.best_places && group.best_places.length > 0) {
@@ -433,68 +897,352 @@ async function fetchSidebarTopRated() {
   }
 }
 
-// 6. KHỞI TẠO BẢN ĐỒ VIỆT NAM (LEAFLET VỚI TỌA ĐỘ THỰC)
+// 8. BẢN ĐỒ VIỆT NAM (LEAFLET TỌA ĐỘ THỰC & TỰ ĐỘNG ĐỊNH VỊ VỊ TRÍ BẠN)
+let userLocationMarker = null;
+let currentUserGpsCoords = null;
+
+// Giới hạn khu vực bản đồ rộng rãi quanh Việt Nam và Biển Đông để gạch bản đồ tải tràn viền 100% (triệt tiêu hoàn toàn khoảng trống xám)
+const VIETNAM_REGION_BOUNDS = L.latLngBounds(
+  [5.0, 95.0],   // Phía Nam & Tây Nam (bao gồm trọn vẹn biển đảo, Vịnh Thái Lan)
+  [26.0, 118.0]  // Phía Bắc & Đông Bắc (bao gồm trọn vẹn miền Bắc, Vịnh Bắc Bộ và Biển Đông)
+);
+
 function initLeafletMap() {
   if (!mapInstance) {
-    // Tọa độ trung tâm Việt Nam: [16.0611, 108.2272], zoom cấp quốc gia 6
-    mapInstance = L.map('mapViewContainer').setView([16.0611, 108.2272], 6);
+    mapInstance = L.map('mapViewContainer', {
+      scrollWheelZoom: true,
+      maxBounds: VIETNAM_REGION_BOUNDS,
+      maxBoundsViscosity: 0.6,
+      minZoom: 4.2,            // Cho phép thu nhỏ vừa vặn toàn cảnh dải đất chữ S Việt Nam
+      maxZoom: 18
+    });
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; Bản đồ Việt Nam OpenStreetMap'
+    // Sử dụng Esri World Street Map không giới hạn bounds để gạch bản đồ tải tràn viền 100%, không bao giờ xuất hiện mảng xám trống
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+      attribution: '&copy; Bản đồ Việt Nam (Esri World Street Map)',
+      maxZoom: 18
     }).addTo(mapInstance);
+
+    // Canh chỉnh khung nhìn hiển thị trọn vẹn toàn bộ dải đất chữ S Việt Nam từ Bắc vào Nam
+    mapInstance.fitBounds([[8.1, 102.0], [23.5, 109.8]], { padding: [15, 15] });
   }
 
+  // Invalidate kích thước container để bản đồ hiển thị đầy đủ ngay lập tức
   setTimeout(() => {
-    mapInstance.invalidateSize();
-    renderMapMarkers(allLocations);
-  }, 200);
+    if (mapInstance) {
+      mapInstance.invalidateSize();
+      mapInstance.fitBounds([[8.1, 102.0], [23.5, 109.8]], { padding: [15, 15] });
+      autoShowUserLocationOnMap();
+    }
+  }, 80);
+
+  setTimeout(() => {
+    if (mapInstance) {
+      mapInstance.invalidateSize();
+      renderMapMarkers(allLocations);
+      autoShowUserLocationOnMap();
+    }
+  }, 250);
+}
+
+// Tự động lấy GPS hiển thị vị trí người dùng lên bản đồ
+function autoShowUserLocationOnMap() {
+  if (currentUserGpsCoords) {
+    addUserLocationPinToMap(currentUserGpsCoords.lat, currentUserGpsCoords.lng, false);
+    return;
+  }
+
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        currentUserGpsCoords = { lat: latitude, lng: longitude };
+        addUserLocationPinToMap(latitude, longitude, false);
+      },
+      (err) => {
+        console.log('Chưa cấp quyền GPS hoặc dùng tọa độ mặc định:', err.message);
+      },
+      { timeout: 6000, enableHighAccuracy: true }
+    );
+  }
+}
+
+// Ghim biểu tượng vị trí người dùng với hiệu ứng sóng xanh tỏa ra và bảng tên nổi bật
+function addUserLocationPinToMap(userLat, userLng, isFallback = false) {
+  if (!mapInstance) return;
+
+  if (userLocationMarker) {
+    mapInstance.removeLayer(userLocationMarker);
+  }
+
+  const userPinIcon = L.divIcon({
+    className: 'custom-user-pin',
+    html: `
+      <div style="position: relative; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+        <span class="user-pulse-ring" style="position: absolute; width: 38px; height: 38px; border-radius: 50%; background: rgba(37, 99, 235, 0.4);"></span>
+        <div style="position: relative; width: 22px; height: 22px; background: #2563eb; border: 3px solid white; border-radius: 50%; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.7); display: flex; align-items: center; justify-content: center; z-index: 2;">
+          <div style="width: 7px; height: 7px; background: white; border-radius: 50%;"></div>
+        </div>
+        <div style="position: absolute; top: -22px; white-space: nowrap; background: #1e3a8a; color: white; font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 9999px; box-shadow: 0 2px 6px rgba(0,0,0,0.25); pointer-events: none;">
+          📍 Vị trí của bạn
+        </div>
+      </div>
+    `,
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
+    popupAnchor: [0, -22]
+  });
+
+  userLocationMarker = L.marker([userLat, userLng], { icon: userPinIcon, zIndexOffset: 1000 }).addTo(mapInstance);
+  userLocationMarker.bindPopup(`
+    <div style="font-family: 'Plus Jakarta Sans', sans-serif; padding: 4px; text-align: center;">
+      <div style="font-weight: 800; color: #1e3a8a; font-size: 13px;">📍 Vị trí hiện tại của bạn</div>
+      <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Tọa độ: [${userLng.toFixed(4)}, ${userLat.toFixed(4)}]</div>
+      ${isFallback ? '<div style="font-size: 10px; color: #f59e0b; margin-top: 2px;">(Tọa độ mẫu Đà Nẵng)</div>' : '<div style="font-size: 10px; color: #10b981; font-weight: 700; margin-top: 2px;">✓ Đã xác thực GPS chính xác</div>'}
+    </div>
+  `);
 }
 
 function renderMapMarkers(locations) {
   if (!mapInstance) return;
 
-  // Xóa các marker cũ
   mapMarkers.forEach(m => mapInstance.removeLayer(m));
   mapMarkers = [];
 
   const countLabel = document.getElementById('mapPointsCountLabel');
   if (countLabel) countLabel.textContent = `${locations.length} điểm ghim`;
 
+  // Custom marker pin màu cam chuẩn FoodTravel.vn
+  const orangePinIcon = L.divIcon({
+    className: 'custom-map-pin',
+    html: `
+      <div style="position: relative; width: 30px; height: 38px;">
+        <div style="position: absolute; width: 30px; height: 30px; background: #FF5422; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(255, 84, 34, 0.5); border: 2.5px solid white;">
+          <i class="fa-solid fa-location-dot" style="transform: rotate(45deg); color: white; font-size: 13px;"></i>
+        </div>
+      </div>
+    `,
+    iconSize: [30, 38],
+    iconAnchor: [15, 38],
+    popupAnchor: [0, -38]
+  });
+
   locations.forEach(loc => {
+    if (!loc.location || !loc.location.coordinates || loc.location.coordinates.length < 2) return;
     const [lng, lat] = loc.location.coordinates;
-    const marker = L.marker([lat, lng]).addTo(mapInstance);
+    const marker = L.marker([lat, lng], { icon: orangePinIcon }).addTo(mapInstance);
+    marker.locationId = loc._id.toString();
     
+    const imgUrl = (loc.images && loc.images.length > 0) ? loc.images[0] : 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400';
+
     marker.bindPopup(`
-      <div style="font-family: 'Plus Jakarta Sans', sans-serif; padding: 4px; min-width: 190px;">
-        <b style="color: #FF5422; font-size: 13px;">${loc.name}</b><br/>
-        <span style="font-size: 11px; color: #64748b;">${loc.city} • ${loc.category}</span><br/>
-        <span style="font-size: 11px; font-weight: bold; color: #f59e0b;">⭐ ${loc.rating_avg ? loc.rating_avg.toFixed(1) : '5.0'} (${loc.total_reviews} đánh giá)</span><br/>
-        <button onclick="openLocationModal('${loc._id}')" style="margin-top: 8px; width: 100%; padding: 6px 10px; background: #FF5422; color: white; border: none; border-radius: 8px; font-size: 11px; cursor: pointer; font-weight: bold;">
+      <div style="font-family: 'Plus Jakarta Sans', sans-serif; padding: 2px; width: 220px;">
+        <img src="${imgUrl}" style="width: 100%; height: 110px; object-fit: cover; border-radius: 12px; margin-bottom: 8px;">
+        <div style="font-weight: 800; color: #0f172a; font-size: 13px; line-height: 1.3;">${loc.name}</div>
+        <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${loc.city} • ${loc.category}</div>
+        <div style="font-size: 11px; font-weight: 700; color: #f59e0b; margin-top: 4px;">
+          ⭐ ${loc.rating_avg ? loc.rating_avg.toFixed(1) : '5.0'} <span style="color: #94a3b8; font-weight: 400;">(${loc.total_reviews} đánh giá)</span>
+        </div>
+        <button onclick="openLocationModal('${loc._id}')" style="margin-top: 8px; width: 100%; padding: 7px 10px; background: #FF5422; color: white; border: none; border-radius: 10px; font-size: 11px; cursor: pointer; font-weight: 700; transition: background 0.2s;">
           Xem bài viết &amp; đánh giá
         </button>
       </div>
-    `);
+    `, { maxWidth: 260 });
 
     mapMarkers.push(marker);
   });
 }
 
+// Lia bản đồ mượt mà tới địa điểm khi người dùng nhấp từ bất kỳ bài viết/thẻ nào
+function flyToLocationOnMap(locId, event) {
+  if (event) event.stopPropagation();
+
+  // Đóng modal chi tiết nếu đang mở
+  closeLocationModal();
+
+  // Chuyển sang View Bản đồ
+  switchView('map');
+
+  // Tìm thông tin địa điểm theo id
+  const loc = allLocations.find(l => l._id.toString() === locId.toString());
+  if (!loc || !loc.location || !loc.location.coordinates) return;
+
+  const [lng, lat] = loc.location.coordinates;
+
+  // Đảm bảo Leaflet map đã khởi tạo và invalidate kích thước
+  setTimeout(() => {
+    if (!mapInstance) initLeafletMap();
+    if (mapInstance) {
+      mapInstance.invalidateSize();
+      // Lia bản đồ mượt mà tới tọa độ với zoom 16
+      mapInstance.flyTo([lat, lng], 16, {
+        duration: 1.5,
+        easeLinearity: 0.25
+      });
+
+      // Tự động mở popup của marker tại địa điểm đó
+      setTimeout(() => {
+        const targetMarker = mapMarkers.find(m => m.locationId === locId.toString());
+        if (targetMarker) {
+          targetMarker.openPopup();
+        }
+      }, 1000);
+
+      // Cuộn màn hình tới bản đồ
+      const mapContainer = document.getElementById('mapViewContainer');
+      if (mapContainer) {
+        mapContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, 120);
+}
+
 function focusCityMap(city) {
   if (!mapInstance) return;
-  const cityCoords = {
-    'ALL': [16.0611, 108.2272, 6],
-    'Đà Nẵng': [16.0611, 108.2272, 13],
-    'Hà Nội': [21.0285, 105.8542, 13],
-    'TP.HCM': [10.7769, 106.7009, 13]
-  };
+  if (city === 'ALL') {
+    mapInstance.fitBounds([[8.1, 102.0], [23.5, 109.8]], { padding: [15, 15] });
+  } else {
+    const cityCoords = {
+      'Đà Nẵng': [16.0544, 108.2022, 13],
+      'Hà Nội': [21.0285, 105.8542, 13],
+      'TP.HCM': [10.7769, 106.7009, 13]
+    };
 
-  const target = cityCoords[city];
-  if (target) {
-    mapInstance.flyTo([target[0], target[1]], target[2], { duration: 1.2 });
+    const target = cityCoords[city];
+    if (target) {
+      mapInstance.flyTo([target[0], target[1]], target[2], { duration: 1.2 });
+    }
+  }
+
+  // Cập nhật nút active
+  document.querySelectorAll('.map-city-btn').forEach(btn => {
+    btn.className = 'map-city-btn px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-bold text-slate-700 transition-all cursor-pointer';
+  });
+  const btnIdMap = {
+    'ALL': 'btnMapCity_ALL',
+    'Hà Nội': 'btnMapCity_HN',
+    'Đà Nẵng': 'btnMapCity_DN',
+    'TP.HCM': 'btnMapCity_HCM'
+  };
+  const activeBtn = document.getElementById(btnIdMap[city]);
+  if (activeBtn) {
+    activeBtn.className = 'map-city-btn px-3 py-1.5 bg-[#FF5422] text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs';
   }
 }
 
-// 7. TÌM GẦN VỊ TRÍ HIỆN TẠI (GEOSPATIAL 2DSPHERE)
+// 9. ĐỊNH VỊ GPS NGƯỜI DÙNG & GỢI Ý ĐỊA ĐIỂM GẦN BẠN
+function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371; // km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function locateUserAndSuggestNearby() {
+  const btn = document.getElementById('btnMapLocateMe');
+  if (btn) {
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-xs"></i> <span>Đang xác định GPS...</span>';
+  }
+
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        currentUserGpsCoords = { lat: latitude, lng: longitude };
+        handleUserLocated(latitude, longitude, false);
+        if (btn) btn.innerHTML = '<i class="fa-solid fa-location-crosshairs text-xs"></i> <span>Vị trí của tôi & Gợi ý gần đây</span>';
+      },
+      (err) => {
+        console.warn('Không lấy được GPS chính xác, dùng tọa độ trung tâm:', err);
+        const fallbackLat = currentUserGpsCoords ? currentUserGpsCoords.lat : 16.0611;
+        const fallbackLng = currentUserGpsCoords ? currentUserGpsCoords.lng : 108.2272;
+        handleUserLocated(fallbackLat, fallbackLng, !currentUserGpsCoords);
+        if (btn) btn.innerHTML = '<i class="fa-solid fa-location-crosshairs text-xs"></i> <span>Vị trí của tôi & Gợi ý gần đây</span>';
+      },
+      { timeout: 8000, enableHighAccuracy: true }
+    );
+  } else {
+    handleUserLocated(16.0611, 108.2272, true);
+    if (btn) btn.innerHTML = '<i class="fa-solid fa-location-crosshairs text-xs"></i> <span>Vị trí của tôi & Gợi ý gần đây</span>';
+  }
+}
+
+function handleUserLocated(userLat, userLng, isFallback = false) {
+  if (!mapInstance) initLeafletMap();
+
+  currentUserGpsCoords = { lat: userLat, lng: userLng };
+  addUserLocationPinToMap(userLat, userLng, isFallback);
+
+  if (userLocationMarker) {
+    userLocationMarker.openPopup();
+  }
+
+  // Lia bản đồ mượt mà tới vị trí người dùng
+  mapInstance.flyTo([userLat, userLng], 14, { duration: 1.5 });
+
+  // Tính khoảng cách tới toàn bộ các địa điểm trong MongoDB
+  const distances = allLocations
+    .filter(loc => loc.location && loc.location.coordinates && loc.location.coordinates.length >= 2)
+    .map(loc => {
+      const [lng, lat] = loc.location.coordinates;
+      const d = calculateHaversineDistance(userLat, userLng, lat, lng);
+      return { ...loc, distance_km: d };
+    });
+
+  distances.sort((a, b) => a.distance_km - b.distance_km);
+  const topNearby = distances.slice(0, 6);
+
+  // Hiển thị khung gợi ý
+  const box = document.getElementById('nearbySuggestionsBox');
+  const list = document.getElementById('nearbySuggestionsList');
+  const title = document.getElementById('nearbySuggestionsTitle');
+
+  if (box && list) {
+    box.classList.remove('hidden');
+    if (title) {
+      title.textContent = `Top ${topNearby.length} địa điểm ẩm thực & du lịch gần bạn nhất`;
+    }
+
+    list.innerHTML = topNearby.map(item => {
+      const img = (item.images && item.images.length > 0) ? item.images[0] : 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=300';
+      const distStr = item.distance_km < 1
+        ? `${Math.round(item.distance_km * 1000)} m`
+        : `${item.distance_km.toFixed(1)} km`;
+
+      return `
+        <div class="bg-white rounded-2xl p-2.5 border border-slate-200/80 shadow-xs flex items-center space-x-3 hover:shadow-md transition-shadow">
+          <img src="${img}" class="w-16 h-16 rounded-xl object-cover shrink-0 cursor-pointer" onclick="openLocationModal('${item._id}')">
+          <div class="flex-1 min-w-0">
+            <h5 onclick="openLocationModal('${item._id}')" class="text-xs font-bold text-slate-800 truncate hover:text-[#FF5422] cursor-pointer">${item.name}</h5>
+            <div class="flex items-center space-x-1.5 text-[10px] text-slate-500 mt-0.5">
+              <span class="font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-md flex items-center space-x-0.5">
+                <i class="fa-solid fa-person-walking"></i>
+                <span>${distStr}</span>
+              </span>
+              <span>•</span>
+              <span class="text-amber-500 font-bold">⭐ ${item.rating_avg ? item.rating_avg.toFixed(1) : '5.0'}</span>
+            </div>
+            <div class="flex items-center space-x-2 mt-1.5">
+              <button onclick="flyToLocationOnMap('${item._id}')" class="text-[10px] font-bold text-[#FF5422] hover:underline cursor-pointer">
+                Lia bản đồ
+              </button>
+              <span class="text-slate-300">|</span>
+              <button onclick="openLocationModal('${item._id}')" class="text-[10px] font-semibold text-slate-600 hover:text-slate-900 cursor-pointer">
+                Xem chi tiết
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+}
+
+// 9. TÌM GẦN VỊ TRÍ HIỆN TẠI (GEOSPATIAL 2DSPHERE)
 function getUserCurrentLocationAndFetchNearby() {
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
@@ -527,7 +1275,7 @@ async function fetchNearbyLocations(lng, lat) {
   }
 }
 
-// 8. BẢNG THỐNG KÊ AGGREGATION PIPELINE
+// 10. BẢNG THỐNG KÊ AGGREGATION PIPELINE
 async function fetchAggregationStats() {
   try {
     const [resCities, resTopRated] = await Promise.all([
@@ -535,7 +1283,6 @@ async function fetchAggregationStats() {
       fetch('/api/analytics/top-rated').then(r => r.json())
     ]);
 
-    // Bảng 1: Phân bố theo thành phố
     const tableCity = document.getElementById('tableStatsCity');
     if (tableCity) {
       tableCity.innerHTML = resCities.map(c => `
@@ -548,7 +1295,6 @@ async function fetchAggregationStats() {
       `).join('');
     }
 
-    // Bảng 2: Top địa điểm điểm cao nhất
     const tableTopRated = document.getElementById('tableStatsTopRated');
     if (tableTopRated) {
       let topPlaces = [];
@@ -574,13 +1320,14 @@ async function fetchAggregationStats() {
         </tr>
       `).join('');
     }
-
   } catch (err) {
     console.error('Lỗi thống kê aggregation:', err);
   }
 }
 
-// 9. MODAL CHI TIẾT ĐỊA ĐIỂM (TỰ ĐỘNG RESET VỊ TRÍ CUỘN LÊN ĐỈNH ĐẦU)
+// =====================================================================
+// 11. MODAL CHI TIẾT ĐỊA ĐIỂM (ĐÃ XÓA THANH CUỘN THEO ẢNH 1 & TỰ ĐỘNG LẤY TÀI KHOẢN MONGODB)
+// =====================================================================
 async function openLocationModal(locId) {
   activeLocationId = locId;
   const modal = document.getElementById('locationDetailModal');
@@ -605,18 +1352,299 @@ async function openLocationModal(locId) {
       imgEl.src = (loc.images && loc.images.length > 0) ? loc.images[0] : 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800';
     }
 
+    // Cập nhật trạng thái Thả tim trong Modal (Đồng bộ MongoDB)
+    const isLiked = loc.liked_by && currentUser ? loc.liked_by.includes(currentUser.email) : false;
+    updateModalLikeUI(isLiked, loc.likes_count || 0);
+
+    // Cập nhật trạng thái Lưu địa điểm trong Modal (Đồng bộ MongoDB)
+    const isSaved = isLocationSaved(locId);
+    updateModalSaveUI(isSaved);
+
+    // Tự động điền tài khoản người dùng đăng nhập MongoDB gọn gàng, không thừa thãi
+    const inputUser = document.getElementById('inputReviewUser');
+    const inputUserDisplay = document.getElementById('inputReviewUserDisplay');
+    const avatarUser = document.getElementById('reviewUserAvatar');
+    if (currentUser) {
+      if (inputUser) inputUser.value = currentUser.name;
+      if (inputUserDisplay) inputUserDisplay.textContent = currentUser.name;
+      if (avatarUser) avatarUser.src = currentUser.avatar;
+    } else {
+      if (inputUser) inputUser.value = 'Khách ẩn danh';
+      if (inputUserDisplay) inputUserDisplay.textContent = 'Khách ẩn danh';
+    }
+
+    // Reset bộ chọn sao Google Play về 5 sao
+    resetStarRatingToDefault();
+
     renderReviewsList(loc.reviews || []);
     modal.classList.remove('hidden');
 
-    // SỬA LỖI ẢNH 3: Luôn reset vị trí cuộn lên đỉnh đầu khi mở bất kỳ card nào
-    if (modalContainer) {
-      modalContainer.scrollTop = 0;
-    }
-    if (modalBody) {
-      modalBody.scrollTop = 0;
-    }
+    // Reset cuộn lên đỉnh đầu
+    if (modalContainer) modalContainer.scrollTop = 0;
+    if (modalBody) modalBody.scrollTop = 0;
   } catch (err) {
     console.error('Lỗi mở chi tiết bài viết:', err);
+  }
+}
+
+// Thả tim trực tiếp trong Modal chi tiết (Đồng bộ MongoDB)
+async function toggleModalLike() {
+  if (!activeLocationId) return;
+  if (!currentUser) {
+    openAuthModal('login');
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/locations/${activeLocationId}/like`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_email: currentUser.email })
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      // Cập nhật mảng địa điểm trong bộ nhớ
+      const loc = allLocations.find(l => l._id === activeLocationId);
+      if (loc) {
+        loc.likes_count = data.likes_count;
+        if (!loc.liked_by) loc.liked_by = [];
+        if (data.isLiked) {
+          loc.liked_by.push(currentUser.email);
+        } else {
+          loc.liked_by = loc.liked_by.filter(e => e !== currentUser.email);
+        }
+      }
+
+      // Cập nhật giao diện trong Modal
+      updateModalLikeUI(data.isLiked, data.likes_count);
+
+      // Đồng bộ ra nút like ngoài danh sách thẻ card
+      const cardBtn = document.getElementById(`btnLike_${activeLocationId}`);
+      if (cardBtn) {
+        if (data.isLiked) {
+          cardBtn.className = 'flex items-center space-x-1.5 text-rose-600 font-bold transition-colors cursor-pointer';
+          cardBtn.innerHTML = `<i class="fa-solid fa-heart text-rose-500 text-sm"></i><span id="likeCount_${activeLocationId}">${data.likes_count}</span>`;
+        } else {
+          cardBtn.className = 'flex items-center space-x-1.5 text-slate-600 hover:text-rose-500 transition-colors cursor-pointer';
+          cardBtn.innerHTML = `<i class="fa-regular fa-heart text-sm"></i><span id="likeCount_${activeLocationId}">${data.likes_count}</span>`;
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Lỗi thả tim trong chi tiết:', err);
+  }
+}
+
+function updateModalLikeUI(isLiked, count) {
+  const modalLikeBtn = document.getElementById('modalLikeBtn');
+  const modalLikeIcon = document.getElementById('modalLikeIcon');
+  const modalLikesCount = document.getElementById('modalLikesCount');
+  const bannerLikeBtn = document.getElementById('modalBannerLikeBtn');
+  const bannerLikeIcon = document.getElementById('modalBannerLikeIcon');
+
+  if (modalLikesCount) modalLikesCount.textContent = `${count || 0} thích`;
+
+  if (isLiked) {
+    if (modalLikeBtn) {
+      modalLikeBtn.className = 'flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-rose-500 hover:bg-rose-600 text-white font-bold transition-all cursor-pointer shadow-sm shadow-rose-500/25 border border-rose-500';
+    }
+    if (modalLikeIcon) {
+      modalLikeIcon.className = 'fa-solid fa-heart text-white text-xs';
+    }
+    if (bannerLikeBtn) {
+      bannerLikeBtn.className = 'absolute top-4 right-16 z-20 w-9 h-9 rounded-full bg-rose-500 text-white flex items-center justify-center transition-all cursor-pointer shadow-md hover:scale-105';
+    }
+    if (bannerLikeIcon) {
+      bannerLikeIcon.className = 'fa-solid fa-heart text-sm text-white';
+    }
+  } else {
+    if (modalLikeBtn) {
+      modalLikeBtn.className = 'flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-600 font-bold transition-all cursor-pointer border border-slate-200 shadow-xs';
+    }
+    if (modalLikeIcon) {
+      modalLikeIcon.className = 'fa-regular fa-heart text-rose-500 text-xs';
+    }
+    if (bannerLikeBtn) {
+      bannerLikeBtn.className = 'absolute top-4 right-16 z-20 w-9 h-9 rounded-full bg-white/90 hover:bg-white text-slate-700 hover:text-rose-500 flex items-center justify-center transition-all cursor-pointer shadow-md hover:scale-105';
+    }
+    if (bannerLikeIcon) {
+      bannerLikeIcon.className = 'fa-regular fa-heart text-sm text-rose-500';
+    }
+  }
+}
+
+// Lưu / Bỏ lưu trực tiếp trong Modal chi tiết (Đồng bộ MongoDB)
+async function toggleModalSave() {
+  if (!activeLocationId) return;
+  await toggleSaveLocation(activeLocationId, null);
+  const isSaved = isLocationSaved(activeLocationId);
+  updateModalSaveUI(isSaved);
+}
+
+function updateModalSaveUI(isSaved) {
+  const bannerSaveBtn = document.getElementById('modalBannerSaveBtn');
+  const bannerSaveIcon = document.getElementById('modalBannerSaveIcon');
+  const modalSaveBtn = document.getElementById('modalSaveBtn');
+  const modalSaveIcon = document.getElementById('modalSaveIcon');
+  const modalSaveText = document.getElementById('modalSaveText');
+
+  if (bannerSaveBtn) {
+    bannerSaveBtn.title = isSaved ? 'Bỏ lưu địa điểm' : 'Lưu địa điểm này';
+    bannerSaveBtn.className = isSaved
+      ? 'absolute top-4 right-28 z-20 w-9 h-9 rounded-full bg-amber-500 text-white flex items-center justify-center transition-all cursor-pointer shadow-md hover:scale-105'
+      : 'absolute top-4 right-28 z-20 w-9 h-9 rounded-full bg-white/90 hover:bg-white text-slate-700 flex items-center justify-center transition-all cursor-pointer shadow-md hover:scale-105';
+  }
+  if (bannerSaveIcon) {
+    bannerSaveIcon.className = isSaved ? 'fa-solid fa-bookmark text-sm text-white' : 'fa-regular fa-bookmark text-sm text-amber-500';
+  }
+
+  if (modalSaveBtn) {
+    modalSaveBtn.className = isSaved
+      ? 'flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-amber-500 hover:bg-amber-600 text-white font-bold transition-all cursor-pointer shadow-sm shadow-amber-500/25 border border-amber-500'
+      : 'flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-white hover:bg-amber-50 text-slate-700 hover:text-amber-600 font-bold transition-all cursor-pointer border border-slate-200 shadow-xs';
+  }
+  if (modalSaveIcon) {
+    modalSaveIcon.className = isSaved ? 'fa-solid fa-bookmark text-white text-xs' : 'fa-regular fa-bookmark text-amber-500 text-xs';
+  }
+  if (modalSaveText) {
+    modalSaveText.textContent = isSaved ? 'Đã lưu' : 'Lưu';
+  }
+}
+
+// Bật tắt lưu địa điểm (Bookmarks) kết nối API MongoDB
+async function toggleSaveLocation(locId, event) {
+  if (event) event.stopPropagation();
+  if (!currentUser) {
+    openAuthModal('login');
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/auth/save-location/${locId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: currentUser._id,
+        user_email: currentUser.email
+      })
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      currentUser.saved_locations = data.saved_locations || [];
+      localStorage.setItem('foodtravel_user', JSON.stringify(currentUser));
+
+      updateSaveUI(locId, data.isSaved, data.saved_count);
+      showToast(data.message || (data.isSaved ? 'Đã lưu địa điểm thành công!' : 'Đã bỏ lưu địa điểm!'));
+    } else {
+      showToast(data.error || 'Lỗi thao tác lưu địa điểm', 'error');
+    }
+  } catch (err) {
+    console.error('Lỗi toggleSaveLocation:', err);
+  }
+}
+
+function updateSaveUI(locId, isSaved, count) {
+  // Cập nhật nút bookmark trên thẻ card
+  const badgeCard = document.getElementById(`badgeSaveCard_${locId}`);
+  if (badgeCard) {
+    badgeCard.title = isSaved ? 'Bỏ lưu địa điểm' : 'Lưu địa điểm này';
+    badgeCard.className = `absolute top-3 right-3 w-8 h-8 rounded-full ${isSaved ? 'bg-amber-500 text-white' : 'bg-slate-900/60 text-white hover:bg-slate-900/80'} backdrop-blur-md flex items-center justify-center transition-all shadow-md cursor-pointer hover:scale-110 z-10`;
+    badgeCard.innerHTML = `<i class="${isSaved ? 'fa-solid' : 'fa-regular'} fa-bookmark text-xs"></i>`;
+  }
+
+  const btnCard = document.getElementById(`btnSaveCard_${locId}`);
+  if (btnCard) {
+    btnCard.title = isSaved ? 'Bỏ lưu địa điểm' : 'Lưu địa điểm này';
+    btnCard.className = `flex items-center space-x-1.5 ${isSaved ? 'text-amber-600 font-bold' : 'text-slate-600 hover:text-amber-500'} transition-colors cursor-pointer`;
+    btnCard.innerHTML = `<i class="${isSaved ? 'fa-solid text-amber-500' : 'fa-regular'} fa-bookmark text-sm"></i><span class="hidden sm:inline">${isSaved ? 'Đã lưu' : 'Lưu'}</span>`;
+  }
+
+  // Cập nhật Modal chi tiết nếu đang mở cho địa điểm này
+  if (activeLocationId && activeLocationId.toString() === locId.toString()) {
+    updateModalSaveUI(isSaved);
+  }
+
+  // Cập nhật số lượng trên Modal Profile
+  const profileCountEl = document.getElementById('profileSavedCount');
+  const profileBadgeEl = document.getElementById('profileSavedBadge');
+  const totalSaved = count !== undefined ? count : (currentUser.saved_locations ? currentUser.saved_locations.length : 0);
+  if (profileCountEl) profileCountEl.textContent = totalSaved;
+  if (profileBadgeEl) {
+    profileBadgeEl.textContent = totalSaved;
+    if (totalSaved > 0) profileBadgeEl.classList.remove('hidden');
+    else profileBadgeEl.classList.add('hidden');
+  }
+
+  // Nếu tab "Địa điểm đã lưu" đang mở trong profile modal, vẽ lại ngay
+  const profileSavedList = document.getElementById('profileSavedList');
+  if (profileSavedList && !profileSavedList.classList.contains('hidden')) {
+    renderSavedLocationsList(currentUser.saved_locations || []);
+  }
+}
+
+// Bộ chọn đánh giá sao kiểu Google Play
+let currentSelectedRating = 5;
+const ratingTextMap = {
+  1: '1 sao - Rất tệ',
+  2: '2 sao - Tệ',
+  3: '3 sao - Bình thường',
+  4: '4 sao - Hài lòng',
+  5: '5 sao - Tuyệt vời'
+};
+
+function initStarRatingComponent() {
+  const container = document.getElementById('starRatingGroup');
+  if (!container) return;
+  const stars = container.querySelectorAll('.star-rate-item');
+  const ratingInput = document.getElementById('inputReviewRating');
+  const ratingLabel = document.getElementById('starRatingLabel');
+
+  function renderStars(val) {
+    stars.forEach(s => {
+      const v = parseInt(s.dataset.value);
+      if (v <= val) {
+        s.className = 'star-rate-item fa-solid fa-star text-2xl text-amber-400 transition-all hover:scale-125';
+      } else {
+        s.className = 'star-rate-item fa-regular fa-star text-2xl text-slate-300 transition-all hover:scale-125';
+      }
+    });
+    if (ratingLabel) ratingLabel.textContent = ratingTextMap[val] || `${val} sao`;
+  }
+
+  stars.forEach(star => {
+    star.addEventListener('mouseenter', () => {
+      const v = parseInt(star.dataset.value);
+      renderStars(v);
+    });
+    star.addEventListener('click', () => {
+      currentSelectedRating = parseInt(star.dataset.value);
+      if (ratingInput) ratingInput.value = currentSelectedRating;
+      renderStars(currentSelectedRating);
+    });
+  });
+
+  container.addEventListener('mouseleave', () => {
+    renderStars(currentSelectedRating);
+  });
+
+  resetStarRatingToDefault();
+}
+
+function resetStarRatingToDefault() {
+  currentSelectedRating = 5;
+  const ratingInput = document.getElementById('inputReviewRating');
+  const ratingLabel = document.getElementById('starRatingLabel');
+  if (ratingInput) ratingInput.value = 5;
+  if (ratingLabel) ratingLabel.textContent = '5 sao - Tuyệt vời';
+
+  const container = document.getElementById('starRatingGroup');
+  if (container) {
+    const stars = container.querySelectorAll('.star-rate-item');
+    stars.forEach(s => {
+      s.className = 'star-rate-item fa-solid fa-star text-2xl text-amber-400 transition-all hover:scale-125';
+    });
   }
 }
 
@@ -667,7 +1695,7 @@ function renderReviewsList(reviews) {
 
         <p class="text-xs text-slate-600 leading-relaxed">${rev.content}</p>
 
-        <!-- Phản hồi phân cấp (Replies lồng nhau) -->
+        <!-- Phản hồi phân cấp -->
         ${repliesHtml}
 
         <!-- Nút Trả lời -->
@@ -682,17 +1710,17 @@ function renderReviewsList(reviews) {
   }).join('');
 }
 
-// 10. GỬI ĐÁNH GIÁ MỚI
+// 12. GỬI ĐÁNH GIÁ MỚI (LƯU TRỰC TIẾP VÀO MONGODB & CHẠY AGGREGATION TỰ ĐỘNG)
 async function submitReview() {
   if (!activeLocationId) return;
 
-  const userNameInput = document.getElementById('inputReviewUser');
-  const userName = userNameInput ? userNameInput.value.trim() : '';
-  const rating = document.getElementById('inputReviewRating').value;
+  const userName = currentUser ? currentUser.name : (document.getElementById('inputReviewUser').value.trim() || 'Người dùng');
+  const userAvatar = currentUser ? currentUser.avatar : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100';
+  const rating = parseInt(document.getElementById('inputReviewRating').value) || 5;
   const content = document.getElementById('inputReviewContent').value.trim();
 
-  if (!userName || !content) {
-    alert('Vui lòng nhập họ tên và nội dung đánh giá!');
+  if (!content) {
+    alert('Vui lòng nhập nội dung đánh giá của bạn!');
     return;
   }
 
@@ -700,15 +1728,22 @@ async function submitReview() {
     const res = await fetch(`/api/locations/${activeLocationId}/reviews`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_name: userName, rating, content })
+      body: JSON.stringify({ 
+        user_name: userName, 
+        avatar: userAvatar,
+        rating, 
+        content 
+      })
     });
 
     const data = await res.json();
     if (res.ok) {
-      alert(`Đã gửi đánh giá thành công! Điểm đánh giá cập nhật: ⭐ ${data.rating_avg}`);
+      alert(`Đã gửi đánh giá thành công! Điểm đánh giá mới tính từ Aggregation Pipeline: ⭐ ${data.rating_avg}`);
       document.getElementById('inputReviewContent').value = '';
+      resetStarRatingToDefault();
       openLocationModal(activeLocationId);
       fetchLocations();
+      fetchHeroOverviewStats();
     } else {
       alert('Lỗi: ' + data.error);
     }
@@ -717,10 +1752,9 @@ async function submitReview() {
   }
 }
 
-// 11. PHẢN HỒI ĐÁNH GIÁ (REPLY)
+// 13. PHẢN HỒI ĐÁNH GIÁ (REPLY)
 async function promptReply(reviewId) {
-  const defaultName = currentUser ? currentUser.name : 'Người phản hồi';
-  const replyName = prompt('Nhập tên của bạn (hoặc Ban quản lý địa điểm):', defaultName);
+  const replyName = currentUser ? currentUser.name : (prompt('Nhập tên của bạn:') || 'Thành viên cộng đồng');
   if (!replyName) return;
   const replyContent = prompt('Nhập nội dung phản hồi:');
   if (!replyContent) return;
@@ -733,7 +1767,7 @@ async function promptReply(reviewId) {
     });
 
     if (res.ok) {
-      alert('Đã gửi phản hồi thành công!');
+      alert('Đã gửi phản hồi thành công vào MongoDB!');
       openLocationModal(activeLocationId);
     }
   } catch (err) {
@@ -741,19 +1775,332 @@ async function promptReply(reviewId) {
   }
 }
 
-// 12. THÊM ĐỊA ĐIỂM / BÀI VIẾT MỚI
+// =====================================================================
+// 14. CHIA SẺ BÀI VIẾT / ĐỊA ĐIỂM KÈM HÌNH ẢNH THỰC TẾ
+// =====================================================================
 function openNewLocationModal() {
   document.getElementById('newLocationModal').classList.remove('hidden');
+  // Tự động hỏi quyền GPS từ trình duyệt và lấy đúng vị trí thực tế của người dùng
+  requestLocationAccessForNewPost();
 }
 
 function closeNewLocationModal() {
   document.getElementById('newLocationModal').classList.add('hidden');
 }
 
+// Xử lý tải file ảnh thực tế (PNG, JPG, WEBP) từ thiết bị
+async function handleImageFileSelected(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+  if (!validTypes.includes(file.type)) {
+    alert('Vui lòng chọn đúng file ảnh định dạng PNG, JPG hoặc WEBP!');
+    event.target.value = '';
+    return;
+  }
+
+  // 1. Hiển thị xem trước ảnh ngay lập tức bằng FileReader
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    document.getElementById('imgPreviewTag').src = e.target.result;
+    document.getElementById('imgPreviewFileName').textContent = `📄 ${file.name} (${(file.size / 1024).toFixed(0)} KB)`;
+    document.getElementById('imgPreviewBox').classList.remove('hidden');
+    document.getElementById('uploadPromptBox').classList.add('hidden');
+  };
+  reader.readAsDataURL(file);
+
+  // 2. Tải file ảnh thực tế lên máy chủ (lưu vào /uploads/ trên server)
+  const formData = new FormData();
+  formData.append('image', file);
+
+  try {
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+    if (res.ok) {
+      document.getElementById('newLocImgUrl').value = data.url;
+      console.log('✅ Đã tải file ảnh lên thành công:', data.url);
+    } else {
+      alert('Lỗi tải ảnh: ' + data.error);
+    }
+  } catch (err) {
+    console.error('Lỗi upload file:', err);
+  }
+}
+
+function clearSelectedImage(event) {
+  if (event) event.stopPropagation();
+  document.getElementById('newLocFileInput').value = '';
+  document.getElementById('newLocImgUrl').value = '';
+  document.getElementById('imgPreviewBox').classList.add('hidden');
+  document.getElementById('uploadPromptBox').classList.remove('hidden');
+}
+
+function setPresetImage(url, name) {
+  document.getElementById('newLocImgUrl').value = url;
+  document.getElementById('imgPreviewTag').src = url;
+  document.getElementById('imgPreviewFileName').textContent = `Mẫu: ${name || 'Ảnh ẩm thực'}`;
+  document.getElementById('imgPreviewBox').classList.remove('hidden');
+  document.getElementById('uploadPromptBox').classList.add('hidden');
+}
+
+// Xử lý khi người dùng chọn file ảnh đại diện PNG/JPG từ máy tính
+async function handleAvatarFileSelected(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+  if (!validTypes.includes(file.type)) {
+    alert('Vui lòng chọn file ảnh đại diện PNG, JPG hoặc WEBP!');
+    event.target.value = '';
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('image', file);
+
+  try {
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+    if (res.ok) {
+      currentUser.avatar = data.url;
+      localStorage.setItem('foodtravel_user', JSON.stringify(currentUser));
+      updateUserUI();
+      document.getElementById('profileModalAvatar').src = currentUser.avatar;
+
+      if (currentUser._id) {
+        await fetch(`/api/auth/profile/${currentUser._id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ avatar: data.url })
+        });
+      } else if (currentUser.email) {
+        await fetch('/api/auth/profile-by-email', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: currentUser.email, avatar: data.url })
+        });
+      }
+      if (typeof fetchStories === 'function') fetchStories();
+      alert('Đã cập nhật ảnh đại diện mới vào hồ sơ và toàn bộ Story trên MongoDB!');
+    } else {
+      alert('Lỗi tải ảnh đại diện: ' + data.error);
+    }
+  } catch (err) {
+    console.error('Lỗi đổi avatar:', err);
+  }
+}
+
+// Tự động hỏi quyền GPS của trình duyệt và lấy đúng vị trí thực tế của người dùng
+async function requestLocationAccessForNewPost() {
+  const helperBox = document.getElementById('gpsStatusHelperBox');
+  const coordsDisplay = document.getElementById('newLocCoordsDisplay');
+  const latInput = document.getElementById('newLocLat');
+  const lngInput = document.getElementById('newLocLng');
+
+  if (!navigator.geolocation) {
+    if (helperBox) {
+      helperBox.classList.remove('hidden');
+      helperBox.innerHTML = `
+        <div class="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800 flex items-start space-x-2">
+          <i class="fa-solid fa-triangle-exclamation text-amber-600 mt-0.5"></i>
+          <div>Trình duyệt không hỗ trợ Geolocation. Tọa độ được gán theo thành phố bạn chọn.</div>
+        </div>
+      `;
+    }
+    handleCityChangeManual();
+    return;
+  }
+
+  // Kiểm tra trạng thái quyền vị trí của trình duyệt
+  if (navigator.permissions && navigator.permissions.query) {
+    try {
+      const pStatus = await navigator.permissions.query({ name: 'geolocation' });
+      if (pStatus.state === 'denied') {
+        if (helperBox) {
+          helperBox.classList.remove('hidden');
+          helperBox.innerHTML = `
+            <div class="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 space-y-1.5">
+              <div class="flex items-center space-x-1.5 font-bold text-rose-700">
+                <i class="fa-solid fa-ban text-rose-600"></i>
+                <span>Trình duyệt đang CHẶN quyền vị trí cho trang web này!</span>
+              </div>
+              <p class="text-[11px] text-rose-800 leading-relaxed">
+                Đó là lý do bạn <strong>không thấy popup thông báo hỏi lại</strong>. Cách mở lại:
+              </p>
+              <div class="text-[11px] text-rose-900 space-y-1 pl-1 bg-white/70 p-2 rounded-lg border border-rose-100">
+                <div>👉 <strong>Bước 1:</strong> Bấm vào biểu tượng <strong>Cài đặt / Ổ khóa 🔒</strong> ở thanh URL (bên trái chữ <code>localhost:5055</code>).</div>
+                <div>👉 <strong>Bước 2:</strong> Gạt dòng <strong>"Vị trí" (Location)</strong> sang <strong>Cho phép (Allow)</strong> hoặc "Hỏi lại (Ask)".</div>
+                <div>👉 <strong>Bước 3:</strong> Nhấn nút <strong>"Lấy lại GPS"</strong> ngay bên dưới.</div>
+              </div>
+            </div>
+          `;
+        }
+      } else if (pStatus.state === 'prompt') {
+        if (helperBox) {
+          helperBox.classList.remove('hidden');
+          helperBox.innerHTML = `
+            <div class="p-2.5 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-start space-x-2">
+              <i class="fa-solid fa-arrow-turn-up text-blue-600 mt-0.5 text-sm animate-bounce"></i>
+              <div class="leading-relaxed text-[11px]">
+                <strong>Hãy nhìn lên góc trên bên trái màn hình</strong> (ngay dưới thanh địa chỉ URL) và bấm nút <strong>"Cho phép" (Allow)</strong> trong popup nhỏ của trình duyệt để FoodTravel.vn lấy đúng GPS nhé!
+              </div>
+            </div>
+          `;
+        }
+      }
+    } catch (e) {
+      console.warn('Permissions query không khả dụng:', e);
+    }
+  }
+
+  if (coordsDisplay) {
+    coordsDisplay.innerHTML = `<i class="fa-solid fa-location-crosshairs text-blue-500 animate-spin"></i> <span class="text-blue-600 font-semibold">Đang yêu cầu GPS từ trình duyệt...</span>`;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      currentUserGpsCoords = { lat, lng };
+      latInput.value = lat.toFixed(4);
+      lngInput.value = lng.toFixed(4);
+
+      if (helperBox) helperBox.classList.add('hidden');
+
+      // Tính khoảng cách thực tế để chọn đúng thành phố gần bạn nhất
+      const cityDistances = [
+        { city: 'Hà Nội', dist: calculateHaversineDistance(lat, lng, 21.0285, 105.8542) },
+        { city: 'Đà Nẵng', dist: calculateHaversineDistance(lat, lng, 16.0611, 108.2272) },
+        { city: 'TP.HCM', dist: calculateHaversineDistance(lat, lng, 10.7769, 106.7009) }
+      ];
+      cityDistances.sort((a, b) => a.dist - b.dist);
+      const closestCity = cityDistances[0].city;
+
+      const citySelect = document.getElementById('newLocCity');
+      if (citySelect) citySelect.value = closestCity;
+      const cityTag = document.getElementById('fbCityTagDisplay');
+      if (cityTag) cityTag.innerHTML = `<span>${closestCity}</span>`;
+
+      if (coordsDisplay) {
+        coordsDisplay.innerHTML = `
+          <div class="flex items-center space-x-1.5 text-emerald-700">
+            <i class="fa-solid fa-circle-check text-emerald-500"></i>
+            <span class="font-bold">Đã định vị GPS thực tế: [${lng.toFixed(4)}, ${lat.toFixed(4)}] (${closestCity})</span>
+          </div>
+        `;
+      }
+
+      updateFbCheckinTag(document.getElementById('newLocName').value.trim() || closestCity);
+    },
+    (err) => {
+      console.warn('Lỗi định vị Geolocation:', err.code, err.message);
+      handleCityChangeManual();
+      const curCity = document.getElementById('newLocCity').value;
+
+      if (helperBox) {
+        helperBox.classList.remove('hidden');
+        if (err.code === 1) { // PERMISSION_DENIED
+          helperBox.innerHTML = `
+            <div class="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 space-y-1.5">
+              <div class="font-bold text-rose-700 flex items-center space-x-1">
+                <i class="fa-solid fa-ban text-rose-600"></i>
+                <span>Trình duyệt đang CHẶN quyền vị trí!</span>
+              </div>
+              <p class="text-[11px] text-rose-800">
+                Bạn hoặc trình duyệt đã từ chối yêu cầu GPS trước đó. Hãy nhấn vào biểu tượng <strong>Cài đặt / Ổ khóa 🔒</strong> ở đầu thanh địa chỉ URL &rarr; <strong>Bật "Vị trí" thành Cho phép</strong> &rarr; Bấm "Thử lại GPS".
+              </p>
+            </div>
+          `;
+        } else if (err.code === 2) { // POSITION_UNAVAILABLE
+          helperBox.innerHTML = `
+            <div class="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800">
+              <i class="fa-solid fa-satellite-dish mr-1 text-amber-600"></i>
+              <strong>Không lấy được tín hiệu GPS phần cứng:</strong> Thiết bị có thể đang tắt Location Service của Windows hoặc không có WiFi/GPS. Tạm dùng tọa độ theo thành phố [${curCity}].
+            </div>
+          `;
+        } else {
+          helperBox.innerHTML = `
+            <div class="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800">
+              <i class="fa-solid fa-clock mr-1 text-amber-600"></i>
+              Yêu cầu GPS quá thời gian chờ. Hệ thống tạm dùng tọa độ theo thành phố [${curCity}].
+            </div>
+          `;
+        }
+      }
+
+      if (coordsDisplay) {
+        coordsDisplay.innerHTML = `
+          <div class="flex items-center space-x-1 text-slate-500">
+            <i class="fa-solid fa-location-pin text-amber-500"></i>
+            <span>Tọa độ trung tâm: [${document.getElementById('newLocLng').value}, ${document.getElementById('newLocLat').value}] (${curCity})</span>
+            <button type="button" onclick="requestLocationAccessForNewPost()" class="text-blue-600 font-bold underline hover:text-blue-700 cursor-pointer ml-1">Thử lại GPS</button>
+          </div>
+        `;
+      }
+    },
+    { enableHighAccuracy: true, timeout: 8000 }
+  );
+}
+
+function handleCityChangeManual() {
+  const city = document.getElementById('newLocCity').value;
+  const cityTag = document.getElementById('fbCityTagDisplay');
+  if (cityTag) cityTag.innerHTML = `<span>${city}</span>`;
+
+  const coords = {
+    'Đà Nẵng': { lng: 108.2272, lat: 16.0611 },
+    'Hà Nội': { lng: 105.8542, lat: 21.0285 },
+    'TP.HCM': { lng: 106.7009, lat: 10.7769 }
+  };
+  if (coords[city]) {
+    document.getElementById('newLocLng').value = coords[city].lng;
+    document.getElementById('newLocLat').value = coords[city].lat;
+    const coordsDisplay = document.getElementById('newLocCoordsDisplay');
+    if (coordsDisplay) {
+      coordsDisplay.innerHTML = `
+        <div class="flex items-center space-x-1 text-slate-500">
+          <i class="fa-solid fa-location-pin text-slate-400"></i>
+          <span>Tọa độ trung tâm: [${coords[city].lng}, ${coords[city].lat}] (${city})</span>
+          <button type="button" onclick="requestLocationAccessForNewPost()" class="text-blue-600 font-bold underline hover:text-blue-700 cursor-pointer ml-1">Lấy GPS thực</button>
+        </div>
+      `;
+    }
+  }
+}
+
+function autoFillCoordinatesByCity() {
+  handleCityChangeManual();
+}
+
+function getCurrentLocationForNewPost() {
+  requestLocationAccessForNewPost();
+}
+
+// Cập nhật tag check-in phong cách Facebook
+function updateFbCheckinTag(name) {
+  const tag = document.getElementById('fbPostCheckinTag');
+  if (!tag) return;
+  if (name && name.trim()) {
+    tag.textContent = `— đang ở tại ${name.trim()}`;
+    tag.classList.remove('hidden');
+  } else {
+    tag.textContent = '';
+    tag.classList.add('hidden');
+  }
+}
+
 async function submitNewLocation() {
   const name = document.getElementById('newLocName').value.trim();
   const city = document.getElementById('newLocCity').value;
   const category = document.getElementById('newLocCategory').value;
+  const imgUrl = document.getElementById('newLocImgUrl').value.trim() || 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800';
   const lng = parseFloat(document.getElementById('newLocLng').value);
   const lat = parseFloat(document.getElementById('newLocLat').value);
   const desc = document.getElementById('newLocDesc').value.trim();
@@ -771,6 +2118,7 @@ async function submitNewLocation() {
         name,
         city,
         category,
+        images: [imgUrl],
         lng,
         lat,
         description: desc
@@ -779,13 +2127,641 @@ async function submitNewLocation() {
 
     const data = await res.json();
     if (res.ok) {
-      alert('Đã lưu bài viết / địa điểm mới thành công!');
+      alert('Đã lưu bài viết & địa điểm mới kèm hình ảnh vào MongoDB thành công!');
       closeNewLocationModal();
       fetchLocations();
+      fetchHeroOverviewStats();
     } else {
       alert('Lỗi: ' + data.error);
     }
   } catch (err) {
     console.error('Lỗi tạo địa điểm:', err);
+  }
+}
+
+// =====================================================================
+// 15. HỆ THỐNG STORY PHONG CÁCH MẠNG XÃ HỘI (INSTAGRAM / TIKTOK / FACEBOOK)
+// LƯU TRỮ VÀ ĐỒNG BỘ 100% TRỰC TIẾP TRÊN MONGODB
+// =====================================================================
+
+let allStories = [];
+let currentStoryIndex = 0;
+let storyTimer = null;
+let storyProgressInterval = null;
+let storyProgressPercent = 0;
+let isStoryPaused = false;
+const STORY_DURATION_MS = 5000; // Mỗi story chạy 5 giây
+
+// Tải danh sách Story từ MongoDB
+async function fetchStories() {
+  try {
+    const res = await fetch('/api/stories');
+    if (!res.ok) throw new Error('Không thể tải stories');
+    allStories = await res.json();
+    renderStoriesTray();
+    renderFigmaHeroStories();
+  } catch (err) {
+    console.error('Lỗi tải Stories từ MongoDB:', err);
+  }
+}
+
+// Cập nhật 4 thẻ Mosaic trên Hero Banner đồng bộ trực tiếp từ các Story thực tế trên MongoDB theo đúng mẫu Figma
+function renderFigmaHeroStories() {
+  if (!allStories || allStories.length === 0) return;
+
+  const s0 = allStories[0];
+  const s1 = allStories[1] || s0;
+  const s2 = allStories[2] || s0;
+  const s3 = allStories[3] || s0;
+
+  // Thẻ 0 (Trên - Trái): Ảnh Story + Số like (Figma chuẩn)
+  const img0 = document.getElementById('heroMosaicImg_0');
+  const like0 = document.getElementById('heroMosaicLike_0');
+  if (img0 && s0) {
+    img0.src = s0.image;
+    img0.alt = s0.location_name;
+  }
+  if (like0 && s0) {
+    like0.textContent = s0.likes_count || 0;
+  }
+
+  // Thẻ 1 (Dưới - Trái): Ảnh Story + Tên địa điểm check-in (Figma chuẩn)
+  const img1 = document.getElementById('heroMosaicImg_1');
+  const loc1 = document.getElementById('heroMosaicLoc_1');
+  if (img1 && s1) {
+    img1.src = s1.image;
+    img1.alt = s1.location_name;
+  }
+  if (loc1 && s1) {
+    loc1.textContent = s1.location_name || 'Hội An';
+  }
+
+  // Thẻ 2 (Trên - Phải): Ảnh Story + Tên địa điểm check-in (Figma chuẩn)
+  const img2 = document.getElementById('heroMosaicImg_2');
+  const loc2 = document.getElementById('heroMosaicLoc_2');
+  if (img2 && s2) {
+    img2.src = s2.image;
+    img2.alt = s2.location_name;
+  }
+  if (loc2 && s2) {
+    loc2.textContent = s2.location_name || 'Hạ Long';
+  }
+
+  // Thẻ 3 (Dưới - Phải): Ảnh Story + Số like (Figma chuẩn)
+  const img3 = document.getElementById('heroMosaicImg_3');
+  const like3 = document.getElementById('heroMosaicLike_3');
+  if (img3 && s3) {
+    img3.src = s3.image;
+    img3.alt = s3.location_name;
+  }
+  if (like3 && s3) {
+    like3.textContent = s3.likes_count || 0;
+  }
+}
+
+// Hiển thị thanh Story Tray trên bảng tin (chuẩn Instagram / Facebook)
+function renderStoriesTray() {
+  const container = document.getElementById('storiesTrayContainer');
+  if (!container) return;
+
+  const myAvatar = currentUser && currentUser.avatar ? currentUser.avatar : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100';
+
+  // Nút 1: Tạo Story của bạn (+ icon)
+  let html = `
+    <div onclick="openCreateStoryModal()" class="flex flex-col items-center space-y-1.5 shrink-0 cursor-pointer group">
+      <div class="relative w-16 h-16 sm:w-[68px] sm:h-[68px] rounded-full p-[2px] bg-slate-100 group-hover:bg-[#FFD4C4] transition-colors">
+        <img src="${myAvatar}" class="w-full h-full rounded-full object-cover border-2 border-white">
+        <div class="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-[#FF5422] text-white flex items-center justify-center border-2 border-white shadow-xs text-[11px] group-hover:scale-110 transition-transform">
+          <i class="fa-solid fa-plus"></i>
+        </div>
+      </div>
+      <span class="text-[11px] font-bold text-slate-800 text-center max-w-[70px] truncate">Tạo story</span>
+    </div>
+  `;
+
+  // Các Story của cộng đồng từ MongoDB
+  allStories.forEach((st, idx) => {
+    const isMyStory = currentUser && (st.user_email === currentUser.email || st.user_name === currentUser.name);
+    const authorAvatar = (isMyStory && currentUser.avatar) ? currentUser.avatar : (st.user_avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100');
+    const authorName = (isMyStory && currentUser.name) ? currentUser.name : st.user_name;
+
+    html += `
+      <div onclick="openStoryViewer(${idx})" class="flex flex-col items-center space-y-1.5 shrink-0 cursor-pointer group">
+        <!-- Vòng tròn gradient phong cách Instagram / Facebook rực rỡ -->
+        <div class="w-16 h-16 sm:w-[68px] sm:h-[68px] rounded-full p-[2.5px] bg-gradient-to-tr from-[#FF5422] via-[#FF007A] to-[#7928CA] group-hover:scale-105 transition-transform duration-300 shadow-xs">
+          <div class="w-full h-full rounded-full p-[2px] bg-white">
+            <img src="${authorAvatar}" class="w-full h-full rounded-full object-cover">
+          </div>
+        </div>
+        <div class="text-center max-w-[72px]">
+          <span class="text-[11px] font-bold text-slate-800 block truncate group-hover:text-[#FF5422] transition-colors leading-tight">${authorName}</span>
+          <span class="text-[9px] text-slate-400 block truncate leading-tight mt-0.5">${st.location_name}</span>
+        </div>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+}
+
+// =====================================================================
+// STORY VIEWER (XEM STORY TOÀN MÀN HÌNH TƯƠNG TÁC PHONG CÁCH MXH)
+// =====================================================================
+
+function openStoryViewer(index) {
+  if (!allStories || allStories.length === 0) return;
+  currentStoryIndex = Math.max(0, Math.min(index, allStories.length - 1));
+
+  const modal = document.getElementById('storyViewerModal');
+  if (modal) {
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    showCurrentStory();
+  }
+}
+
+function closeStoryViewer() {
+  clearStoryTimers();
+  const modal = document.getElementById('storyViewerModal');
+  if (modal) {
+    modal.classList.add('hidden');
+    document.body.style.overflow = '';
+  }
+}
+
+function clearStoryTimers() {
+  if (storyTimer) clearTimeout(storyTimer);
+  if (storyProgressInterval) clearInterval(storyProgressInterval);
+  storyTimer = null;
+  storyProgressInterval = null;
+}
+
+function showCurrentStory() {
+  clearStoryTimers();
+  isStoryPaused = false;
+  storyProgressPercent = 0;
+
+  const st = allStories[currentStoryIndex];
+  if (!st) return;
+
+  const isMyStory = currentUser && (st.user_email === currentUser.email || st.user_name === currentUser.name);
+  const authorAvatar = (isMyStory && currentUser.avatar) ? currentUser.avatar : (st.user_avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100');
+  const authorName = (isMyStory && currentUser.name) ? currentUser.name : st.user_name;
+
+  // Cập nhật DOM
+  const imgEl = document.getElementById('storyViewerImage');
+  const avatarEl = document.getElementById('storyViewerAvatar');
+  const authorEl = document.getElementById('storyViewerAuthor');
+  const locationEl = document.getElementById('storyViewerLocation');
+  const timeEl = document.getElementById('storyViewerTime');
+  const captionEl = document.getElementById('storyViewerCaption');
+  const likeCountEl = document.getElementById('storyViewerLikeCount');
+  const likeIconEl = document.getElementById('iconStoryLike');
+  const playPauseBtn = document.getElementById('btnStoryPlayPause');
+
+  if (imgEl) imgEl.src = st.image;
+  if (avatarEl) avatarEl.src = authorAvatar;
+  if (authorEl) authorEl.textContent = authorName;
+  if (locationEl) locationEl.textContent = `${st.location_name}, ${st.location_city}`;
+  if (captionEl) captionEl.textContent = st.caption || 'Khung cảnh tuyệt đẹp tại ' + st.location_name;
+  if (timeEl) timeEl.textContent = formatStoryTime(st.created_at || st.createdAt);
+  if (likeCountEl) likeCountEl.textContent = st.likes_count || 0;
+  if (playPauseBtn) playPauseBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
+
+  // Trạng thái nút Like
+  const isLiked = st.liked_by && currentUser ? st.liked_by.includes(currentUser.email) : false;
+  if (likeIconEl) {
+    likeIconEl.className = isLiked ? 'fa-solid fa-heart text-sm text-rose-500' : 'fa-regular fa-heart text-sm text-rose-400';
+  }
+
+  // Ẩn ngăn kéo replies khi chuyển story
+  const drawer = document.getElementById('storyRepliesDrawer');
+  if (drawer) drawer.classList.add('hidden');
+
+  // Cập nhật số lượng replies trên badge
+  const repliesBadge = document.getElementById('storyRepliesBadge');
+  if (repliesBadge) {
+    const rCount = st.replies ? st.replies.length : 0;
+    repliesBadge.textContent = rCount;
+    if (rCount > 0) {
+      repliesBadge.classList.remove('hidden');
+    } else {
+      repliesBadge.classList.add('hidden');
+    }
+  }
+
+  // Render các đoạn Progress Bar trên đỉnh
+  renderStoryProgressBars();
+
+  // Bắt đầu thanh chạy thời gian tự động
+  startStoryProgress();
+}
+
+function renderStoryProgressBars() {
+  const container = document.getElementById('storyProgressBars');
+  if (!container) return;
+
+  container.innerHTML = allStories.map((_, idx) => {
+    let fillWidth = '0%';
+    if (idx < currentStoryIndex) fillWidth = '100%';
+    return `
+      <div class="h-1 flex-1 bg-white/30 rounded-full overflow-hidden">
+        <div id="storyProgress_${idx}" class="h-full bg-white transition-all duration-100 ease-linear" style="width: ${fillWidth};"></div>
+      </div>
+    `;
+  }).join('');
+}
+
+function startStoryProgress() {
+  const currentBar = document.getElementById(`storyProgress_${currentStoryIndex}`);
+  const stepMs = 50;
+  const increment = (stepMs / STORY_DURATION_MS) * 100;
+
+  storyProgressInterval = setInterval(() => {
+    if (!isStoryPaused) {
+      storyProgressPercent += increment;
+      if (currentBar) currentBar.style.width = Math.min(100, storyProgressPercent) + '%';
+
+      if (storyProgressPercent >= 100) {
+        clearInterval(storyProgressInterval);
+        nextStory();
+      }
+    }
+  }, stepMs);
+}
+
+function nextStory() {
+  if (currentStoryIndex < allStories.length - 1) {
+    currentStoryIndex++;
+    showCurrentStory();
+  } else {
+    closeStoryViewer();
+  }
+}
+
+function prevStory() {
+  if (currentStoryIndex > 0) {
+    currentStoryIndex--;
+    showCurrentStory();
+  } else {
+    // Reset lại story đầu tiên
+    showCurrentStory();
+  }
+}
+
+function toggleStoryPlayPause() {
+  isStoryPaused = !isStoryPaused;
+  const btn = document.getElementById('btnStoryPlayPause');
+  if (btn) {
+    btn.innerHTML = isStoryPaused ? '<i class="fa-solid fa-play"></i>' : '<i class="fa-solid fa-pause"></i>';
+  }
+}
+
+// Hiệu ứng Thả tim bay bổng phong cách Instagram Story
+function spawnStoryHeartAnimation() {
+  const container = document.getElementById('floatingEmojiContainer');
+  if (!container) return;
+
+  const count = 3;
+  for (let i = 0; i < count; i++) {
+    setTimeout(() => {
+      const el = document.createElement('div');
+      el.innerHTML = '<i class="fa-solid fa-heart text-rose-500 drop-shadow-lg"></i>';
+      el.className = 'absolute bottom-20 text-3xl select-none animate-float-up pointer-events-none transition-all';
+      el.style.left = (Math.random() * 50 + 25) + '%';
+      container.appendChild(el);
+      setTimeout(() => el.remove(), 1600);
+    }, i * 150);
+  }
+}
+
+function reactStory(emoji) {
+  spawnStoryHeartAnimation();
+  toggleStoryLike(true);
+}
+
+async function toggleStoryLike(forceLike = false) {
+  const st = allStories[currentStoryIndex];
+  if (!st || !currentUser) return;
+
+  try {
+    const res = await fetch(`/api/stories/${st._id}/react`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_email: currentUser.email })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      st.likes_count = data.likes_count;
+      if (!st.liked_by) st.liked_by = [];
+      if (data.isLiked) {
+        if (!st.liked_by.includes(currentUser.email)) st.liked_by.push(currentUser.email);
+        spawnStoryHeartAnimation();
+      } else {
+        st.liked_by = st.liked_by.filter(e => e !== currentUser.email);
+      }
+
+      const countEl = document.getElementById('storyViewerLikeCount');
+      const iconEl = document.getElementById('iconStoryLike');
+      if (countEl) countEl.textContent = data.likes_count;
+      if (iconEl) {
+        iconEl.className = data.isLiked ? 'fa-solid fa-heart text-sm text-rose-500' : 'fa-regular fa-heart text-sm text-rose-400';
+      }
+    }
+  } catch (err) {
+    console.error('Lỗi like story:', err);
+  }
+}
+
+// Gửi tin nhắn phản hồi cho tác giả Story (Lưu vào MongoDB)
+async function sendStoryReply() {
+  const input = document.getElementById('storyReplyInput');
+  const val = input ? input.value.trim() : '';
+  if (!val) {
+    alert('Vui lòng nhập nội dung tin nhắn!');
+    return;
+  }
+
+  const st = allStories[currentStoryIndex];
+  if (!st) return;
+
+  const replyData = {
+    user_name: currentUser ? currentUser.name : 'Khách trải nghiệm',
+    user_avatar: currentUser ? currentUser.avatar : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
+    user_email: currentUser ? currentUser.email : '',
+    message: val
+  };
+
+  try {
+    const res = await fetch(`/api/stories/${st._id}/reply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(replyData)
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      if (!st.replies) st.replies = [];
+      st.replies.push(data.reply);
+
+      // Cập nhật badge
+      const badge = document.getElementById('storyRepliesBadge');
+      if (badge) {
+        badge.textContent = st.replies.length;
+        badge.classList.remove('hidden');
+      }
+
+      // Xóa input
+      if (input) input.value = '';
+
+      // Hiệu ứng tim bay
+      spawnStoryHeartAnimation();
+
+      // Nếu ngăn kéo đang mở thì vẽ lại
+      const drawer = document.getElementById('storyRepliesDrawer');
+      if (drawer && !drawer.classList.contains('hidden')) {
+        renderStoryRepliesList();
+      }
+
+      alert(`Đã gửi tin nhắn đến tác giả ${st.user_name} thành công!`);
+    } else {
+      alert('Lỗi: ' + (data.error || 'Không thể gửi tin nhắn'));
+    }
+  } catch (err) {
+    console.error('Lỗi gửi tin nhắn story:', err);
+  }
+}
+
+// Bật tắt ngăn kéo xem tin nhắn của Story
+function toggleStoryRepliesDrawer() {
+  const drawer = document.getElementById('storyRepliesDrawer');
+  if (!drawer) return;
+
+  const isHidden = drawer.classList.contains('hidden');
+  if (isHidden) {
+    drawer.classList.remove('hidden');
+    renderStoryRepliesList();
+  } else {
+    drawer.classList.add('hidden');
+  }
+}
+
+function renderStoryRepliesList() {
+  const list = document.getElementById('storyRepliesList');
+  if (!list) return;
+
+  const st = allStories[currentStoryIndex];
+  if (!st || !st.replies || st.replies.length === 0) {
+    list.innerHTML = `
+      <div class="py-6 text-center text-white/50 space-y-1">
+        <i class="fa-regular fa-comment-dots text-2xl mb-1 block"></i>
+        <p class="font-medium text-xs">Chưa có tin nhắn nào</p>
+        <p class="text-[11px] text-white/40">Hãy gửi tin nhắn đầu tiên cho tác giả ${st ? st.user_name : ''}!</p>
+      </div>
+    `;
+    return;
+  }
+
+  list.innerHTML = st.replies.map(r => `
+    <div class="bg-white/10 backdrop-blur-md rounded-2xl p-2.5 flex items-start space-x-2.5 border border-white/5">
+      <img src="${r.user_avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'}" class="w-7 h-7 rounded-full object-cover border border-[#FF5422] shrink-0 mt-0.5">
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center justify-between">
+          <span class="font-bold text-white text-[11px] truncate">${r.user_name}</span>
+          <span class="text-[10px] text-white/70 font-medium">${formatMessageTime(r.created_at)}</span>
+        </div>
+        <p class="text-[11px] text-white/90 mt-0.5 break-words font-normal">${r.message}</p>
+      </div>
+    </div>
+  `).join('');
+}
+
+function formatStoryTime(dateStr) {
+  if (!dateStr) return 'Mới xong';
+  const diffHours = Math.round((Date.now() - new Date(dateStr).getTime()) / (1000 * 3600));
+  if (diffHours <= 0) return 'Vừa xong';
+  if (diffHours < 24) return `${diffHours} giờ trước`;
+  return `${Math.round(diffHours / 24)} ngày trước`;
+}
+
+// Định dạng thời gian gửi tin nhắn rõ ràng: Giờ:Phút kèm Hôm nay / Hôm qua / phút trước
+function formatMessageTime(dateStr) {
+  if (!dateStr) return 'Vừa xong';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return 'Vừa xong';
+
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMinutes = Math.floor(diffMs / 60000);
+
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const timeStr = `${hours}:${minutes}`;
+
+  // Kiểm tra nếu là cùng ngày hôm nay
+  const isToday = d.getDate() === now.getDate() &&
+                  d.getMonth() === now.getMonth() &&
+                  d.getFullYear() === now.getFullYear();
+
+  // Kiểm tra nếu là ngày hôm qua
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = d.getDate() === yesterday.getDate() &&
+                      d.getMonth() === yesterday.getMonth() &&
+                      d.getFullYear() === yesterday.getFullYear();
+
+  if (diffMinutes < 1) {
+    return `${timeStr} (Vừa xong)`;
+  }
+  if (diffMinutes < 60) {
+    return `${timeStr} (${diffMinutes} phút trước)`;
+  }
+  if (isToday) {
+    return `${timeStr} (Hôm nay)`;
+  }
+  if (isYesterday) {
+    return `${timeStr} (Hôm qua)`;
+  }
+
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  return `${timeStr} ${day}/${month}`;
+}
+
+// =====================================================================
+// TẠO STORY MỚI (STORY CREATOR MODAL)
+// =====================================================================
+
+function openCreateStoryModal() {
+  const modal = document.getElementById('createStoryModal');
+  if (!modal) return;
+
+  // Điền danh sách 100 địa điểm vào select
+  const select = document.getElementById('storyLocationSelect');
+  if (select && allLocations && allLocations.length > 0) {
+    select.innerHTML = allLocations.map(l => `
+      <option value="${l.name}" data-city="${l.city}" data-img="${(l.images && l.images[0]) ? l.images[0] : ''}">
+        [${l.city}] ${l.name}
+      </option>
+    `).join('');
+    // Trigger chọn mục đầu tiên
+    handleStoryLocationSelect(select);
+  }
+
+  // Điền thông tin người dùng đang đăng nhập
+  const avatarEl = document.getElementById('storyPreviewUserAvatar');
+  const nameEl = document.getElementById('storyPreviewUserName');
+  if (currentUser) {
+    if (avatarEl) avatarEl.src = currentUser.avatar;
+    if (nameEl) nameEl.textContent = currentUser.name;
+  }
+
+  modal.classList.remove('hidden');
+}
+
+function closeCreateStoryModal() {
+  const modal = document.getElementById('createStoryModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function handleStoryLocationSelect(select) {
+  const opt = select.options[select.selectedIndex];
+  if (!opt) return;
+
+  const locName = opt.value;
+  const locCity = opt.getAttribute('data-city');
+  const locImg = opt.getAttribute('data-img');
+
+  const locTag = document.getElementById('storyPreviewLocationTag');
+  if (locTag) locTag.textContent = `${locName}, ${locCity}`;
+
+  if (locImg) {
+    updateStoryPreviewImage(locImg);
+    const inputImg = document.getElementById('storyImageUrlInput');
+    if (inputImg) inputImg.value = locImg;
+  }
+}
+
+function updateStoryPreviewImage(url) {
+  const preview = document.getElementById('storyPreviewImg');
+  if (preview && url) {
+    preview.src = url;
+  }
+}
+
+function updateStoryPreviewCaption(text) {
+  const preview = document.getElementById('storyPreviewCaptionText');
+  if (preview) {
+    preview.textContent = text || 'Khám phá ẩm thực và cảnh đẹp Việt Nam hôm nay thật tuyệt vời!';
+  }
+}
+
+async function handleStoryImageUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const formData = new FormData();
+  formData.append('image', file);
+
+  try {
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+    if (res.ok && data.url) {
+      updateStoryPreviewImage(data.url);
+      const inputImg = document.getElementById('storyImageUrlInput');
+      if (inputImg) inputImg.value = data.url;
+    } else {
+      alert('Lỗi tải ảnh: ' + (data.error || 'Vui lòng thử lại'));
+    }
+  } catch (err) {
+    console.error('Lỗi upload ảnh:', err);
+  }
+}
+
+async function submitNewStory() {
+  const select = document.getElementById('storyLocationSelect');
+  const opt = select ? select.options[select.selectedIndex] : null;
+  const location_name = opt ? opt.value : 'Việt Nam';
+  const location_city = opt ? opt.getAttribute('data-city') : 'Việt Nam';
+  const image = document.getElementById('storyImageUrlInput').value.trim() || (opt ? opt.getAttribute('data-img') : '');
+  const caption = document.getElementById('storyCaptionInput').value.trim() || 'Trải nghiệm tuyệt vời!';
+
+  if (!image) {
+    alert('Vui lòng chọn hoặc tải lên hình ảnh cho Story!');
+    return;
+  }
+
+  const payload = {
+    user_name: currentUser ? currentUser.name : 'Huỳnh Văn Ngọc',
+    user_avatar: currentUser ? currentUser.avatar : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
+    user_email: currentUser ? currentUser.email : 'vanngoc@foodtravel.vn',
+    location_name,
+    location_city,
+    image,
+    caption
+  };
+
+  try {
+    const res = await fetch('/api/stories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      closeCreateStoryModal();
+      // Tải lại Stories từ MongoDB
+      await fetchStories();
+      // Tự động mở xem story vừa tạo
+      openStoryViewer(0);
+    } else {
+      alert('Lỗi đăng story: ' + (data.error || 'Vui lòng thử lại'));
+    }
+  } catch (err) {
+    console.error('Lỗi lưu story:', err);
   }
 }

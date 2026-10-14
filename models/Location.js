@@ -35,6 +35,8 @@ const locationSchema = new mongoose.Schema({
   },
   rating_avg: { type: Number, default: 0 },
   total_reviews: { type: Number, default: 0 },
+  likes_count: { type: Number, default: 0 },
+  liked_by: [{ type: String }],
   reviews: [reviewSchema]
 }, { timestamps: true });
 

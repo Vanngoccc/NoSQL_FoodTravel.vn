@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 const Location = require('./models/Location');
+const User = require('./models/User');
 const rawLocations = require('./locationsData');
+const { getReviewsForLocation } = require('./update_all_location_reviews');
 
 mongoose.connect('mongodb://127.0.0.1:27017/nosql_locations_db')
   .then(() => console.log('✅ Đã kết nối thành công tới MongoDB!'))
@@ -56,9 +58,9 @@ const sampleReviewComments = [
 ];
 
 const reviewerNames = [
-  'Nguyễn Thành Nam', 'Trần Thu Trang', 'Lê Hoàng Long', 'Phạm Minh Tuấn', 
-  'Vũ Mai Linh', 'Đỗ Gia Huy', 'Bùi Phương Thảo', 'Hoàng Bảo Ngọc',
-  'Đặng Quốc Việt', 'Ngô Thanh Sơn', 'Dương Thúy Hằng', 'Phan Đức Anh'
+  'Huỳnh Văn Ngọc', 'Nguyễn Thành Nam', 'Trần Thu Trang', 'Lê Hoàng Long', 
+  'Phạm Minh Tuấn', 'Vũ Mai Linh', 'Đỗ Gia Huy', 'Bùi Phương Thảo', 
+  'Hoàng Bảo Ngọc', 'Đặng Quốc Việt', 'Ngô Thanh Sơn', 'Dương Thúy Hằng'
 ];
 
 const userAvatars = [
@@ -69,10 +71,48 @@ const userAvatars = [
   'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100'
 ];
 
+// Danh sách người dùng khởi tạo trong MongoDB
+const initialUsers = [
+  {
+    name: 'Huỳnh Văn Ngọc',
+    email: 'vanngoc@foodtravel.vn',
+    password: 'password123',
+    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+    bio: 'Trưởng nhóm đồ án NoSQL Đề tài 04 - Đam mê khám phá ẩm thực ba miền và du lịch phượt.'
+  },
+  {
+    name: 'Thanh Trúc',
+    email: 'thanhtruc@foodtravel.vn',
+    password: 'password123',
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
+    bio: 'Blogger du lịch tự do, yêu thích các bãi biển miền Trung và quán cafe view biển.'
+  },
+  {
+    name: 'Minh Tuấn',
+    email: 'minhtuan@foodtravel.vn',
+    password: 'password123',
+    avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150',
+    bio: 'Nhiếp ảnh gia phong cảnh và reviewer ẩm thực đường phố Hà Nội, Đà Nẵng.'
+  },
+  {
+    name: 'Lan Anh Foodie',
+    email: 'lananh@foodtravel.vn',
+    password: 'password123',
+    avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150',
+    bio: 'Chuyên gia săn lùng các quán ăn ngon - bổ - rẻ trên khắp mọi nẻo đường.'
+  },
+  {
+    name: 'Hoàng Long Travel',
+    email: 'hoanglong@foodtravel.vn',
+    password: 'password123',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+    bio: 'Hướng dẫn viên du lịch chuyên nghiệp, chia sẻ kinh nghiệm check-in thực tế.'
+  }
+];
+
 // Hàm sinh danh sách review chuẩn định mức barem: 5 - 15 reviews mỗi địa điểm
 const generateReviewsForLocation = (locationName) => {
-  // Sinh ngẫu nhiên từ 6 đến 12 reviews (đạt chuẩn định mức 5 - 15 theo barem)
-  const count = Math.floor(Math.random() * 7) + 6;
+  const count = Math.floor(Math.random() * 7) + 6; // 6 - 12 reviews
   const reviews = [];
 
   for (let i = 0; i < count; i++) {
@@ -81,11 +121,10 @@ const generateReviewsForLocation = (locationName) => {
     const avatar = userAvatars[i % userAvatars.length];
 
     const replies = [];
-    // Phản hồi phân cấp (Replies lồng nhau)
     if (i === 0) {
       replies.push({
-        user_name: `Ban quản lý ${locationName}`,
-        content: `Cảm ơn bạn ${authorName} đã ghé thăm và gửi đánh giá tích cực! Kính chúc bạn luôn có những chuyến trải nghiệm tuyệt vời.`,
+        user_name: 'Minh Quân Foodie',
+        content: `Mình cũng đồng ý với bạn ${authorName}, không gian và dịch vụ ở đây trải nghiệm thực tế rất đáng thử!`,
         created_at: new Date(Date.now() - 3600000 * 3)
       });
     }
@@ -125,18 +164,26 @@ const getRealisticDescription = (item) => {
 
 const seedDB = async () => {
   try {
-    // 1. Dọn sạch collection diadiem
+    // 1. Dọn sạch và khởi tạo người dùng trong collection "users"
+    await User.deleteMany({});
+    const insertedUsers = await User.insertMany(initialUsers);
+    console.log(`👤 ĐÃ NẠP THÀNH CÔNG ${insertedUsers.length} NGƯỜI DÙNG VÀO COLLECTION "users" CỦA MONGODB!`);
+
+    // 2. Dọn sạch collection diadiem
     await Location.deleteMany({});
     console.log('🗑️  Đã dọn sạch collection diadiem cũ.');
 
     const formattedLocations = rawLocations.map(item => {
-      const reviews = generateReviewsForLocation(item.name);
+      const reviews = getReviewsForLocation(item);
       const totalReviews = reviews.length;
       const sumRating = reviews.reduce((sum, r) => sum + r.rating, 0);
       const ratingAvg = parseFloat((sumRating / totalReviews).toFixed(1));
 
       const imgs = realisticImages[item.category] || realisticImages.Landmark;
       const imgSelected = imgs[Math.abs(item.custom_id) % imgs.length];
+
+      // Khởi tạo số lượt thích (Likes) lưu trực tiếp trên MongoDB
+      const initialLikes = Math.floor(Math.random() * 250) + 85;
 
       return {
         custom_id: item.custom_id,
@@ -153,21 +200,23 @@ const seedDB = async () => {
         },
         rating_avg: ratingAvg,
         total_reviews: totalReviews,
+        likes_count: initialLikes,
+        liked_by: [],
         reviews: reviews
       };
     });
 
-    // 2. Chèn vào collection diadiem
+    // 3. Chèn vào collection diadiem
     await Location.insertMany(formattedLocations);
     console.log(`🎉 NẠP THÀNH CÔNG ${formattedLocations.length} ĐỊA ĐIỂM VÀO COLLECTION "diadiem"!`);
 
-    // 3. Đồng bộ thêm collection "locations" để đảm bảo khả năng tương thích toàn diện
+    // 4. Đồng bộ thêm collection "locations" để tương thích toàn diện
     const db = mongoose.connection.db;
     await db.collection('locations').deleteMany({});
     await db.collection('locations').insertMany(formattedLocations);
     console.log(`✅ ĐÃ ĐỒNG BỘ SONG SONG ${formattedLocations.length} ĐỊA ĐIỂM VÀO CẢ COLLECTION "locations" VÀ "diadiem"!`);
 
-    // 4. Tạo Indexes chuẩn cho collection diadiem
+    // 5. Tạo Indexes chuẩn cho collection diadiem
     await db.collection('diadiem').createIndex({ location: '2dsphere' });
     await db.collection('diadiem').createIndex({ name: 'text', description: 'text', category: 'text' });
     await db.collection('diadiem').createIndex({ city: 1, category: 1 });
@@ -178,7 +227,7 @@ const seedDB = async () => {
     await db.collection('locations').createIndex({ city: 1, category: 1 });
     await db.collection('locations').createIndex({ rating_avg: -1 });
 
-    console.log('✅ ĐÃ THIẾT LẬP TOÀN BỘ INDEXES (2dsphere, Text Search, Compound, Rating) CHO COLLECTION!');
+    console.log('✅ ĐÃ THIẾT LẬP TOÀN BỘ INDEXES CHO CẢ HAI COLLECTION!');
 
     mongoose.connection.close();
   } catch (error) {
