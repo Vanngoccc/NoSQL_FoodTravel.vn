@@ -432,6 +432,9 @@ function logoutUser() {
 }
 
 // Modal Trang cá nhân (User Profile)
+let currentProfileMessages = { received: [], sent: [], all: [] };
+let activeMsgFilter = 'all';
+
 async function openProfileModal(initialTab = 'posts') {
   if (!currentUser) {
     openAuthModal('login');
@@ -439,6 +442,20 @@ async function openProfileModal(initialTab = 'posts') {
   }
 
   const modal = document.getElementById('userProfileModal');
+
+  // Khôi phục các nút riêng của tài khoản hiện tại
+  const editAvatarBtn = document.getElementById('profileAvatarEditBtn');
+  const logoutBtn = document.getElementById('profileLogoutBtn');
+  const tabSaved = document.getElementById('btnProfileTabSaved');
+  const tabMessages = document.getElementById('btnProfileTabMessages');
+  if (editAvatarBtn) editAvatarBtn.classList.remove('hidden');
+  if (logoutBtn) logoutBtn.classList.remove('hidden');
+  if (tabSaved) tabSaved.classList.remove('hidden');
+  if (tabMessages) tabMessages.classList.remove('hidden');
+
+  const tabPostsBtn = document.getElementById('btnProfileTabPosts');
+  if (tabPostsBtn) tabPostsBtn.textContent = 'Bài viết của tôi';
+
   document.getElementById('profileModalAvatar').src = currentUser.avatar;
   document.getElementById('profileModalName').textContent = currentUser.name;
   document.getElementById('profileModalEmail').textContent = currentUser.email;
@@ -555,69 +572,39 @@ async function openProfileModal(initialTab = 'posts') {
       renderSavedLocationsList(savedList);
     }
 
-    // 4. Lấy tất cả tin nhắn phản hồi từ các story của người dùng và hỗ trợ trả lời lại
+    // 4. Lấy tin nhắn (Nhận được & Đã gửi kiểu Messenger)
     if (currentUser.email) {
       const resReplies = await fetch(`/api/stories/my-replies/${encodeURIComponent(currentUser.email)}`);
       const repliesData = await resReplies.json();
-      const msgListEl = document.getElementById('profileStoryRepliesList');
-      const badgeEl = document.getElementById('profileMessagesBadge');
+      
+      if (repliesData && !Array.isArray(repliesData)) {
+        currentProfileMessages = {
+          received: repliesData.received || [],
+          sent: repliesData.sent || [],
+          all: repliesData.all || []
+        };
+      } else if (Array.isArray(repliesData)) {
+        currentProfileMessages = {
+          received: repliesData,
+          sent: [],
+          all: repliesData
+        };
+      } else {
+        currentProfileMessages = { received: [], sent: [], all: [] };
+      }
 
+      const badgeEl = document.getElementById('profileMessagesBadge');
       if (badgeEl) {
-        if (repliesData && repliesData.length > 0) {
-          badgeEl.textContent = repliesData.length;
+        const totalCount = currentProfileMessages.received.length;
+        if (totalCount > 0) {
+          badgeEl.textContent = totalCount;
           badgeEl.classList.remove('hidden');
         } else {
           badgeEl.classList.add('hidden');
         }
       }
 
-      if (msgListEl) {
-        if (!repliesData || repliesData.length === 0) {
-          msgListEl.innerHTML = '<div class="text-xs text-slate-400 text-center py-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200">Chưa có ai gửi tin nhắn đến khoảnh khắc của bạn.</div>';
-        } else {
-          msgListEl.innerHTML = repliesData.map(msg => `
-            <div class="p-3 bg-orange-50/50 rounded-xl border border-orange-100 text-xs space-y-1.5">
-              <div class="flex items-center justify-between">
-                <div class="flex items-center space-x-1.5 font-bold text-slate-800">
-                  <img src="${getConsistentAvatar(msg.user_name, msg.user_avatar)}" class="w-5 h-5 rounded-full object-cover">
-                  <span>${msg.user_name}</span>
-                </div>
-                <div class="flex items-center space-x-1.5">
-                  <span class="text-[10px] text-slate-500 font-medium">${formatMessageTime(msg.created_at)}</span>
-                  <button onclick="deleteStoryMessage('${msg.story_id}', ${msg.reply_index})" class="text-slate-400 hover:text-rose-500 text-xs p-1 cursor-pointer transition-colors" title="Xóa tin nhắn này">
-                    <i class="fa-regular fa-trash-can"></i>
-                  </button>
-                </div>
-              </div>
-              <p class="text-[11px] text-slate-700 font-medium bg-white p-2 rounded-lg border border-orange-100/50">"${msg.message}"</p>
-              <div class="text-[10px] text-[#FF5422] font-semibold flex items-center space-x-1">
-                <i class="fa-solid fa-camera text-[9px]"></i>
-                <span>Khoảnh khắc: ${msg.location_name}</span>
-              </div>
-
-              ${msg.reply_back ? `
-                <div class="p-2 bg-emerald-50 rounded-lg text-emerald-800 text-[11px] font-semibold flex items-start space-x-1.5 border border-emerald-100">
-                  <span class="text-emerald-600 font-bold">↳ Bạn:</span>
-                  <span>${msg.reply_back}</span>
-                </div>
-              ` : `
-                <div id="replyBox_${msg.story_id}_${msg.reply_index}" class="hidden pt-1 space-y-1.5">
-                  <div class="flex items-center space-x-1.5">
-                    <input type="text" id="replyInput_${msg.story_id}_${msg.reply_index}" placeholder="Nhập câu trả lời cho ${msg.user_name}..." class="flex-1 px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-[#FF5422]">
-                    <button onclick="sendStoryReplyBack('${msg.story_id}', ${msg.reply_index})" class="px-3 py-1.5 bg-[#FF5422] hover:bg-[#E84615] text-white rounded-lg text-xs font-bold cursor-pointer transition-colors shrink-0">
-                      Gửi
-                    </button>
-                  </div>
-                </div>
-                <button onclick="document.getElementById('replyBox_${msg.story_id}_${msg.reply_index}').classList.toggle('hidden')" class="text-[10px] font-bold text-[#FF5422] hover:underline cursor-pointer flex items-center space-x-1 pt-0.5">
-                  <i class="fa-solid fa-reply text-[9px]"></i>
-                  <span>Trả lời tin nhắn này</span>
-                </button>
-              `}
-            </div>
-          `).join('');
-        }
-      }
+      filterProfileMessages(activeMsgFilter || 'all');
     }
   } catch (e) {
     console.error('Lỗi tải profile data:', e);
@@ -625,6 +612,243 @@ async function openProfileModal(initialTab = 'posts') {
 
   switchProfileTab(initialTab);
   modal.classList.remove('hidden');
+}
+
+// Lọc tin nhắn Hộp thư Messenger (Tất cả / Nhận được / Đã gửi)
+function filterProfileMessages(filterType) {
+  activeMsgFilter = filterType;
+  const btnAll = document.getElementById('btnMsgFilterAll');
+  const btnReceived = document.getElementById('btnMsgFilterReceived');
+  const btnSent = document.getElementById('btnMsgFilterSent');
+  const inactiveClass = 'flex-1 py-1 rounded-lg text-slate-500 hover:text-slate-800 transition-all cursor-pointer';
+  const activeClass = 'flex-1 py-1 rounded-lg bg-white text-slate-900 shadow-2xs font-extrabold cursor-pointer transition-all';
+
+  if (btnAll) btnAll.className = (filterType === 'all') ? activeClass : inactiveClass;
+  if (btnReceived) btnReceived.className = (filterType === 'received') ? activeClass : inactiveClass;
+  if (btnSent) btnSent.className = (filterType === 'sent') ? activeClass : inactiveClass;
+
+  renderProfileMessagesList();
+}
+
+function renderProfileMessagesList() {
+  const container = document.getElementById('profileMessagesInnerList');
+  if (!container) return;
+
+  const list = currentProfileMessages[activeMsgFilter] || [];
+  if (list.length === 0) {
+    let emptyMsg = 'Chưa có tin nhắn nào.';
+    if (activeMsgFilter === 'received') emptyMsg = 'Chưa có tin nhắn nào được gửi đến story của bạn.';
+    if (activeMsgFilter === 'sent') emptyMsg = 'Bạn chưa gửi tin nhắn nào vào story của người khác.';
+    container.innerHTML = `<div class="text-xs text-slate-400 text-center py-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200">${emptyMsg}</div>`;
+    return;
+  }
+
+  container.innerHTML = list.map(msg => {
+    const isSentByMe = msg.type === 'sent';
+    if (isSentByMe) {
+      // Tin nhắn tôi gửi cho người khác
+      const recipientName = msg.story_owner_name || 'Tác giả';
+      const recipientAvatar = getConsistentAvatar(recipientName, msg.story_owner_avatar);
+      return `
+        <div class="p-3 bg-blue-50/50 rounded-xl border border-blue-100 text-xs space-y-1.5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-1.5 font-bold text-slate-800">
+              <span class="text-[9px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-bold">Đã gửi</span>
+              <img src="${recipientAvatar}" class="w-5 h-5 rounded-full object-cover">
+              <span class="truncate max-w-[140px]">Gửi đến: ${recipientName}</span>
+            </div>
+            <div class="flex items-center space-x-1.5">
+              <span class="text-[10px] text-slate-400 font-medium">${formatMessageTime(msg.created_at)}</span>
+              <button onclick="deleteStoryMessage('${msg.story_id}', ${msg.reply_index})" class="text-slate-400 hover:text-rose-500 text-xs p-1 cursor-pointer transition-colors" title="Xóa tin nhắn này">
+                <i class="fa-regular fa-trash-can"></i>
+              </button>
+            </div>
+          </div>
+          <p class="text-[11px] text-slate-700 font-medium bg-white p-2 rounded-lg border border-blue-100/60">"${msg.message}"</p>
+          <div class="text-[10px] text-blue-600 font-semibold flex items-center space-x-1">
+            <i class="fa-solid fa-camera text-[9px]"></i>
+            <span>Khoảnh khắc: ${msg.location_name}</span>
+          </div>
+          ${msg.reply_back ? `
+            <div class="p-2 bg-emerald-50 rounded-lg text-emerald-800 text-[11px] font-semibold flex items-start space-x-1.5 border border-emerald-100">
+              <span class="text-emerald-600 font-bold">↳ ${recipientName} trả lời:</span>
+              <span>${msg.reply_back}</span>
+            </div>
+          ` : `
+            <div class="text-[10px] text-slate-400 italic">Đang chờ phản hồi...</div>
+          `}
+        </div>
+      `;
+    } else {
+      // Tin nhắn người khác gửi vào story của tôi
+      const senderName = msg.user_name || 'Người dùng';
+      const senderAvatar = getConsistentAvatar(senderName, msg.user_avatar);
+      return `
+        <div class="p-3 bg-orange-50/50 rounded-xl border border-orange-100 text-xs space-y-1.5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-1.5 font-bold text-slate-800">
+              <span class="text-[9px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 font-bold">Nhận được</span>
+              <img src="${senderAvatar}" class="w-5 h-5 rounded-full object-cover">
+              <span class="truncate max-w-[140px]">${senderName}</span>
+            </div>
+            <div class="flex items-center space-x-1.5">
+              <span class="text-[10px] text-slate-400 font-medium">${formatMessageTime(msg.created_at)}</span>
+              <button onclick="deleteStoryMessage('${msg.story_id}', ${msg.reply_index})" class="text-slate-400 hover:text-rose-500 text-xs p-1 cursor-pointer transition-colors" title="Xóa tin nhắn này">
+                <i class="fa-regular fa-trash-can"></i>
+              </button>
+            </div>
+          </div>
+          <p class="text-[11px] text-slate-700 font-medium bg-white p-2 rounded-lg border border-orange-100/50">"${msg.message}"</p>
+          <div class="text-[10px] text-[#FF5422] font-semibold flex items-center space-x-1">
+            <i class="fa-solid fa-camera text-[9px]"></i>
+            <span>Khoảnh khắc: ${msg.location_name}</span>
+          </div>
+
+          ${msg.reply_back ? `
+            <div class="p-2 bg-emerald-50 rounded-lg text-emerald-800 text-[11px] font-semibold flex items-start space-x-1.5 border border-emerald-100">
+              <span class="text-emerald-600 font-bold">↳ Bạn:</span>
+              <span>${msg.reply_back}</span>
+            </div>
+          ` : `
+            <div id="replyBox_${msg.story_id}_${msg.reply_index}" class="hidden pt-1 space-y-1.5">
+              <div class="flex items-center space-x-1.5">
+                <input type="text" id="replyInput_${msg.story_id}_${msg.reply_index}" placeholder="Nhập câu trả lời cho ${senderName}..." class="flex-1 px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-[#FF5422]">
+                <button onclick="sendStoryReplyBack('${msg.story_id}', ${msg.reply_index})" class="px-3 py-1.5 bg-[#FF5422] hover:bg-[#E84615] text-white rounded-lg text-xs font-bold cursor-pointer transition-colors shrink-0">
+                  Gửi
+                </button>
+              </div>
+            </div>
+            <button onclick="document.getElementById('replyBox_${msg.story_id}_${msg.reply_index}').classList.toggle('hidden')" class="text-[10px] font-bold text-[#FF5422] hover:underline cursor-pointer flex items-center space-x-1 pt-0.5">
+              <i class="fa-solid fa-reply text-[9px]"></i>
+              <span>Trả lời tin nhắn này</span>
+            </button>
+          `}
+        </div>
+      `;
+    }
+  }).join('');
+}
+
+// Xem trang cá nhân công khai của người dùng bất kỳ
+async function openUserProfile(name, email, event) {
+  if (event) {
+    event.stopPropagation();
+  }
+  if (!name || name === 'Thành viên FoodTravel' || name === 'Người khám phá') return;
+
+  // Nếu là chính mình thì mở Profile cá nhân thông thường
+  if (currentUser && (
+    (currentUser.name && currentUser.name.toLowerCase() === name.toLowerCase()) ||
+    (email && currentUser.email && currentUser.email.toLowerCase() === email.toLowerCase())
+  )) {
+    openProfileModal('posts');
+    return;
+  }
+
+  const modal = document.getElementById('userProfileModal');
+  if (!modal) return;
+
+  // Ẩn các nút chỉnh sửa/đăng xuất/hộp thư/đã lưu của riêng mình
+  const editAvatarBtn = document.getElementById('profileAvatarEditBtn');
+  const logoutBtn = document.getElementById('profileLogoutBtn');
+  const tabSaved = document.getElementById('btnProfileTabSaved');
+  const tabMessages = document.getElementById('btnProfileTabMessages');
+  if (editAvatarBtn) editAvatarBtn.classList.add('hidden');
+  if (logoutBtn) logoutBtn.classList.add('hidden');
+  if (tabSaved) tabSaved.classList.add('hidden');
+  if (tabMessages) tabMessages.classList.add('hidden');
+
+  // Đổi tiêu đề tab bài viết
+  const tabPostsBtn = document.getElementById('btnProfileTabPosts');
+  if (tabPostsBtn) tabPostsBtn.textContent = `Bài viết của ${name}`;
+
+  // Đặt thông tin tạm thời
+  document.getElementById('profileModalAvatar').src = getConsistentAvatar(name);
+  document.getElementById('profileModalName').textContent = name;
+  document.getElementById('profileModalEmail').textContent = email || '';
+  document.getElementById('profileModalBio').textContent = 'Thành viên cộng đồng FoodTravel.vn';
+
+  document.getElementById('profilePostCount').textContent = '0';
+  document.getElementById('profileReviewCount').textContent = '0';
+  document.getElementById('profileSavedCount').textContent = '0';
+
+  const postsListEl = document.getElementById('profilePostsList');
+  const reviewsListEl = document.getElementById('profileReviewsList');
+  if (postsListEl) postsListEl.innerHTML = '<div class="text-xs text-slate-400 text-center py-6">Đang tải bài viết...</div>';
+  if (reviewsListEl) reviewsListEl.innerHTML = '<div class="text-xs text-slate-400 text-center py-6">Đang tải đánh giá...</div>';
+
+  switchProfileTab('posts');
+  modal.classList.remove('hidden');
+
+  try {
+    const res = await fetch(`/api/auth/user-profile?name=${encodeURIComponent(name)}&email=${encodeURIComponent(email || '')}`);
+    if (res.ok) {
+      const data = await res.json();
+      const user = data.user || {};
+      const posts = data.posts || [];
+      const reviews = data.reviews || [];
+
+      if (user.avatar) document.getElementById('profileModalAvatar').src = getConsistentAvatar(user.name || name, user.avatar);
+      if (user.bio) document.getElementById('profileModalBio').textContent = user.bio;
+      document.getElementById('profilePostCount').textContent = posts.length;
+      document.getElementById('profileReviewCount').textContent = reviews.length;
+
+      // Render bài viết của user này
+      if (postsListEl) {
+        if (posts.length === 0) {
+          postsListEl.innerHTML = `<div class="text-xs text-slate-400 text-center py-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200">${name} chưa đăng bài viết nào.</div>`;
+        } else {
+          postsListEl.innerHTML = posts.map(p => {
+            const pImg = (p.images && p.images.length > 0) ? p.images[0] : 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=200';
+            return `
+              <div class="p-2.5 bg-slate-50 hover:bg-slate-100/80 rounded-2xl border border-slate-200/80 text-xs flex items-center justify-between gap-2.5 transition-colors group">
+                <div class="flex items-center space-x-2.5 min-w-0 flex-1 cursor-pointer" onclick="closeProfileModal(); openLocationModal('${p._id}')">
+                  <img src="${pImg}" class="w-12 h-12 rounded-xl object-cover shrink-0 border border-slate-200 shadow-2xs">
+                  <div class="min-w-0 flex-1">
+                    <h5 class="text-xs font-bold text-slate-900 truncate group-hover:text-[#FF5422] transition-colors">${p.name}</h5>
+                    <div class="flex items-center space-x-1.5 text-[10px] text-slate-500 mt-0.5">
+                      <span>${p.city}</span>
+                      <span>•</span>
+                      <span class="text-[#FF5422] font-semibold">${p.category}</span>
+                      <span>•</span>
+                      <span class="text-slate-400">${formatPostTime(p.createdAt)}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="flex items-center space-x-1 shrink-0">
+                  <button onclick="closeProfileModal(); flyToLocationOnMap('${p._id}')" class="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-[#FF5422] hover:text-[#FF5422] text-[10px] font-bold text-slate-700 transition-all cursor-pointer shadow-2xs" title="Xem trên bản đồ">
+                    Bản đồ
+                  </button>
+                  <button onclick="closeProfileModal(); openLocationModal('${p._id}')" class="px-2.5 py-1 rounded-lg bg-[#FF5422] text-white text-[10px] font-bold transition-all cursor-pointer shadow-2xs">
+                    Xem
+                  </button>
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+      }
+
+      // Render đánh giá của user này
+      if (reviewsListEl) {
+        if (reviews.length === 0) {
+          reviewsListEl.innerHTML = `<div class="text-xs text-slate-400 text-center py-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200">${name} chưa có đánh giá nào.</div>`;
+        } else {
+          reviewsListEl.innerHTML = reviews.map(r => `
+            <div class="p-2.5 bg-slate-50 hover:bg-slate-100/80 rounded-2xl border border-slate-200/80 text-xs transition-colors cursor-pointer" onclick="closeProfileModal(); openLocationModal('${r.location_id}')">
+              <div class="flex items-center justify-between font-bold text-slate-800">
+                <span class="truncate text-slate-900 font-extrabold hover:text-[#FF5422]">${r.location_name}</span>
+                <span class="text-amber-500 font-extrabold shrink-0">${r.rating}/5</span>
+              </div>
+              <p class="text-[11px] text-slate-500 mt-1 line-clamp-2">${r.content}</p>
+            </div>
+          `).join('');
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Lỗi tải public profile:', err);
+  }
 }
 
 // Xóa tin nhắn câu hỏi/phản hồi Story (Đồng bộ MongoDB)
@@ -905,10 +1129,10 @@ function renderLocationsPage() {
           <!-- Header Thẻ: Người đăng & Tỉnh thành & Thời gian đăng (Đồng bộ MongoDB) -->
           <div class="p-3.5 pb-2.5 flex items-center justify-between">
             <div class="flex items-center space-x-2.5 min-w-0">
-              <img src="${authorAvatar}" class="w-8 h-8 rounded-full object-cover border border-slate-100 shrink-0">
+              <img src="${authorAvatar}" onclick="openUserProfile('${authorName.replace(/'/g, "\\'")}', '${(loc.author_email || '').replace(/'/g, "\\'")}', event)" class="w-8 h-8 rounded-full object-cover border border-slate-100 shrink-0 cursor-pointer hover:ring-2 hover:ring-[#FF5422]/50 transition-all" title="Xem trang cá nhân của ${authorName}">
               <div class="min-w-0">
                 <div class="flex items-center space-x-1.5 truncate">
-                  <h4 class="text-xs font-bold text-slate-900 leading-tight truncate">${authorName}</h4>
+                  <h4 onclick="openUserProfile('${authorName.replace(/'/g, "\\'")}', '${(loc.author_email || '').replace(/'/g, "\\'")}', event)" class="text-xs font-bold text-slate-900 leading-tight truncate cursor-pointer hover:text-[#FF5422] transition-colors" title="Xem trang cá nhân của ${authorName}">${authorName}</h4>
                   ${isMyPost ? '<span class="text-[9px] px-1.5 py-0.5 bg-rose-50 text-rose-600 font-bold rounded shrink-0">Tác giả</span>' : ''}
                 </div>
                 <div class="flex items-center space-x-1.5 text-[10px] text-slate-400 mt-0.5">
@@ -1764,8 +1988,16 @@ async function openLocationModal(locId) {
     const modalCreatedAtText = document.getElementById('modalCreatedAtText');
     const modalBannerDeleteBtn = document.getElementById('modalBannerDeleteBtn');
 
-    if (modalAuthorName) modalAuthorName.textContent = authorName;
-    if (modalAuthorAvatar) modalAuthorAvatar.src = authorAvatar;
+    if (modalAuthorName) {
+      modalAuthorName.textContent = authorName;
+      modalAuthorName.onclick = (e) => openUserProfile(authorName, loc.author_email, e);
+      modalAuthorName.classList.add('cursor-pointer', 'hover:text-[#FF5422]', 'transition-colors');
+    }
+    if (modalAuthorAvatar) {
+      modalAuthorAvatar.src = authorAvatar;
+      modalAuthorAvatar.onclick = (e) => openUserProfile(authorName, loc.author_email, e);
+      modalAuthorAvatar.classList.add('cursor-pointer', 'hover:opacity-80', 'transition-opacity');
+    }
     if (modalCreatedAtText) modalCreatedAtText.textContent = formatPostTime(loc.createdAt);
 
     if (modalAuthorBadge) {
@@ -2116,8 +2348,8 @@ function renderReviewsList(reviews) {
             <div class="bg-slate-100/70 p-2.5 rounded-xl text-xs text-slate-700 space-y-1">
               <div class="flex items-center justify-between">
                 <div class="font-bold text-slate-900 text-[11px] flex items-center space-x-1.5">
-                  <img src="${repAvatar}" class="w-4 h-4 rounded-full object-cover">
-                  <span>${rep.user_name}</span>
+                  <img src="${repAvatar}" onclick="openUserProfile('${rep.user_name.replace(/'/g, "\\'")}', '', event)" class="w-4 h-4 rounded-full object-cover cursor-pointer hover:opacity-80" title="Xem trang cá nhân của ${rep.user_name}">
+                  <span onclick="openUserProfile('${rep.user_name.replace(/'/g, "\\'")}', '', event)" class="cursor-pointer hover:text-[#FF5422] transition-colors" title="Xem trang cá nhân của ${rep.user_name}">${rep.user_name}</span>
                 </div>
                 <button onclick="toggleInlineReply('${rev._id}', '${rep.user_name}')" class="text-[10px] text-slate-400 hover:text-[#FF5422] font-semibold cursor-pointer">
                   Trả lời
@@ -2134,10 +2366,10 @@ function renderReviewsList(reviews) {
       <div class="p-3.5 bg-slate-50/80 rounded-2xl border border-slate-100 space-y-2">
         <div class="flex items-center justify-between">
           <div class="flex items-center space-x-2">
-            <img src="${revAvatar}" class="w-8 h-8 rounded-full object-cover border border-slate-200">
+            <img src="${revAvatar}" onclick="openUserProfile('${rev.user_name.replace(/'/g, "\\'")}', '${(rev.email || '').replace(/'/g, "\\'")}', event)" class="w-8 h-8 rounded-full object-cover border border-slate-200 cursor-pointer hover:ring-2 hover:ring-[#FF5422]/50 transition-all" title="Xem trang cá nhân của ${rev.user_name}">
             <div>
               <div class="flex items-center space-x-1.5">
-                <span class="text-xs font-bold text-slate-900">${rev.user_name}</span>
+                <span onclick="openUserProfile('${rev.user_name.replace(/'/g, "\\'")}', '${(rev.email || '').replace(/'/g, "\\'")}', event)" class="text-xs font-bold text-slate-900 cursor-pointer hover:text-[#FF5422] transition-colors" title="Xem trang cá nhân của ${rev.user_name}">${rev.user_name}</span>
                 ${isAuthor ? '<span class="text-[9px] px-1.5 py-0.2 bg-orange-50 text-[#FF5422] font-bold rounded">Tác giả</span>' : ''}
               </div>
               <div class="text-[10px] text-slate-400">${new Date(rev.created_at).toLocaleDateString('vi-VN')}</div>
@@ -2857,8 +3089,16 @@ function showCurrentStory() {
   const playPauseBtn = document.getElementById('btnStoryPlayPause');
 
   if (imgEl) imgEl.src = st.image;
-  if (avatarEl) avatarEl.src = authorAvatar;
-  if (authorEl) authorEl.textContent = authorName;
+  if (avatarEl) {
+    avatarEl.src = authorAvatar;
+    avatarEl.onclick = (e) => { closeStoryViewer(); openUserProfile(authorName, st.user_email, e); };
+    avatarEl.classList.add('cursor-pointer');
+  }
+  if (authorEl) {
+    authorEl.textContent = authorName;
+    authorEl.onclick = (e) => { closeStoryViewer(); openUserProfile(authorName, st.user_email, e); };
+    authorEl.classList.add('cursor-pointer', 'hover:underline');
+  }
   if (locationEl) locationEl.textContent = `${st.location_name}, ${st.location_city}`;
   if (captionEl) captionEl.textContent = st.caption || 'Khung cảnh tuyệt đẹp tại ' + st.location_name;
   if (timeEl) timeEl.textContent = formatStoryTime(st.created_at || st.createdAt);
@@ -3225,19 +3465,43 @@ function openCreateStoryModal() {
   const modal = document.getElementById('createStoryModal');
   if (!modal) return;
 
-  // Điền danh sách 100 địa điểm vào select
-  const select = document.getElementById('storyLocationSelect');
-  if (select && allLocations && allLocations.length > 0) {
-    select.innerHTML = allLocations.map(l => `
-      <option value="${l.name}" data-city="${l.city}" data-img="${(l.images && l.images[0]) ? l.images[0] : ''}">
-        [${l.city}] ${l.name}
-      </option>
+  // Điền danh sách gợi ý vào datalist
+  const datalist = document.getElementById('storyLocationDatalist');
+  if (datalist && allLocations && allLocations.length > 0) {
+    datalist.innerHTML = allLocations.map(l => `
+      <option value="${l.name}">[${l.city}] ${l.name}</option>
     `).join('');
-    // Trigger chọn mục đầu tiên
-    handleStoryLocationSelect(select);
   }
 
-  // Điền thông tin người dùng đang đăng nhập
+  // Reset các trường
+  selectedStoryImagesList = [];
+  const inputImg = document.getElementById('storyImageUrlInput');
+  if (inputImg) inputImg.value = '';
+  const fileInput = document.getElementById('storyFileInput');
+  if (fileInput) fileInput.value = '';
+  const captionInput = document.getElementById('storyCaptionInput');
+  if (captionInput) captionInput.value = '';
+  const locationInput = document.getElementById('storyLocationInput');
+  if (locationInput) locationInput.value = '';
+  const thumbStrip = document.getElementById('storyUploadThumbnailsStrip');
+  if (thumbStrip) {
+    thumbStrip.innerHTML = '';
+    thumbStrip.classList.add('hidden');
+  }
+  const countBadge = document.getElementById('storyMultiFileCount');
+  if (countBadge) countBadge.classList.add('hidden');
+
+  // Đặt ảnh xem trước mặc định nếu người dùng chưa chọn ảnh nào
+  const defaultImg = (allLocations && allLocations.length > 0 && allLocations[0].images && allLocations[0].images[0])
+    ? allLocations[0].images[0]
+    : 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800';
+  updateStoryPreviewImage(defaultImg);
+  if (inputImg) inputImg.value = defaultImg;
+
+  const locTag = document.getElementById('storyPreviewLocationTag');
+  if (locTag) locTag.textContent = 'Việt Nam';
+
+  // Thông tin tác giả story
   const avatarEl = document.getElementById('storyPreviewUserAvatar');
   const nameEl = document.getElementById('storyPreviewUserName');
   if (currentUser) {
@@ -3253,21 +3517,11 @@ function closeCreateStoryModal() {
   if (modal) modal.classList.add('hidden');
 }
 
-function handleStoryLocationSelect(select) {
-  const opt = select.options[select.selectedIndex];
-  if (!opt) return;
-
-  const locName = opt.value;
-  const locCity = opt.getAttribute('data-city');
-  const locImg = opt.getAttribute('data-img');
-
+// Nhập vị trí check-in tùy ý (giống Facebook check-in, KHÔNG đè hoặc đổi ảnh của người dùng)
+function handleStoryLocationCustomInput(val) {
   const locTag = document.getElementById('storyPreviewLocationTag');
-  if (locTag) locTag.textContent = `${locName}, ${locCity}`;
-
-  if (locImg) {
-    updateStoryPreviewImage(locImg);
-    const inputImg = document.getElementById('storyImageUrlInput');
-    if (inputImg) inputImg.value = locImg;
+  if (locTag) {
+    locTag.textContent = (val && val.trim()) ? val.trim() : 'Việt Nam';
   }
 }
 
@@ -3318,6 +3572,8 @@ async function handleStoryImageUpload(event) {
   if (!files || files.length === 0) return;
 
   const countBadge = document.getElementById('storyMultiFileCount');
+  const strip = document.getElementById('storyUploadThumbnailsStrip');
+
   if (files.length > 1) {
     if (countBadge) {
       countBadge.textContent = `Đã chọn ${files.length} ảnh khoảnh khắc`;
@@ -3327,19 +3583,25 @@ async function handleStoryImageUpload(event) {
     if (countBadge) countBadge.classList.add('hidden');
   }
 
-  // 1. Xem trước ảnh đầu tiên ngay lập tức bằng FileReader
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    updateStoryPreviewImage(e.target.result);
-    const inputImg = document.getElementById('storyImageUrlInput');
-    if (inputImg) inputImg.value = e.target.result;
-    if (files.length === 1) {
-      selectedStoryImagesList = [e.target.result];
-    }
-  };
-  reader.readAsDataURL(files[0]);
+  // 1. Tạo blob URLs tạm thời xem trước ngay lập tức
+  const tempUrls = [];
+  for (let i = 0; i < files.length; i++) {
+    tempUrls.push(URL.createObjectURL(files[i]));
+  }
+  updateStoryPreviewImage(tempUrls[0]);
+  const inputImg = document.getElementById('storyImageUrlInput');
+  if (inputImg) inputImg.value = tempUrls[0];
+  selectedStoryImagesList = [...tempUrls];
 
-  // 2. Upload file lên máy chủ (/uploads/)
+  // Render thumbnail strip
+  if (strip) {
+    strip.innerHTML = tempUrls.map((url, idx) => `
+      <img src="${url}" onclick="updateStoryPreviewImage('${url}')" class="w-12 h-12 rounded-xl object-cover cursor-pointer border-2 border-white hover:border-[#FF5422] shadow-sm shrink-0 transition-transform hover:scale-105" title="Bấm để xem ảnh ${idx + 1}">
+    `).join('');
+    strip.classList.remove('hidden');
+  }
+
+  // 2. Upload file lên máy chủ
   try {
     if (files.length === 1) {
       const formData = new FormData();
@@ -3351,12 +3613,10 @@ async function handleStoryImageUpload(event) {
       const data = await res.json();
       if (res.ok && data.url) {
         updateStoryPreviewImage(data.url);
-        const inputImg = document.getElementById('storyImageUrlInput');
         if (inputImg) inputImg.value = data.url;
         selectedStoryImagesList = [data.url];
       }
     } else {
-      // Đăng nhiều story cùng lúc: Tải hàng loạt ảnh
       const formData = new FormData();
       for (let i = 0; i < files.length; i++) {
         formData.append('images', files[i]);
@@ -3369,8 +3629,12 @@ async function handleStoryImageUpload(event) {
       if (res.ok && data.urls && data.urls.length > 0) {
         selectedStoryImagesList = data.urls;
         updateStoryPreviewImage(data.urls[0]);
-        const inputImg = document.getElementById('storyImageUrlInput');
         if (inputImg) inputImg.value = data.urls[0];
+        if (strip) {
+          strip.innerHTML = data.urls.map((url, idx) => `
+            <img src="${url}" onclick="updateStoryPreviewImage('${url}')" class="w-12 h-12 rounded-xl object-cover cursor-pointer border-2 border-white hover:border-[#FF5422] shadow-sm shrink-0 transition-transform hover:scale-105" title="Ảnh ${idx + 1}">
+          `).join('');
+        }
       }
     }
   } catch (err) {
@@ -3379,12 +3643,23 @@ async function handleStoryImageUpload(event) {
 }
 
 async function submitNewStory() {
-  const select = document.getElementById('storyLocationSelect');
-  const opt = select ? select.options[select.selectedIndex] : null;
-  const location_name = opt ? opt.value : 'Việt Nam';
-  const location_city = opt ? opt.getAttribute('data-city') : 'Việt Nam';
-  const singleImage = document.getElementById('storyImageUrlInput').value.trim() || (opt ? opt.getAttribute('data-img') : '');
-  const caption = document.getElementById('storyCaptionInput').value.trim() || 'Trải nghiệm tuyệt vời!';
+  const locationInput = document.getElementById('storyLocationInput');
+  const locVal = locationInput ? locationInput.value.trim() : '';
+  const location_name = locVal || 'Việt Nam';
+
+  let location_city = 'Việt Nam';
+  if (allLocations && allLocations.length > 0) {
+    const matched = allLocations.find(l => l.name.toLowerCase() === location_name.toLowerCase());
+    if (matched) {
+      location_city = matched.city;
+    } else if (locVal.includes(',')) {
+      const parts = locVal.split(',');
+      location_city = parts[parts.length - 1].trim();
+    }
+  }
+
+  const singleImage = document.getElementById('storyImageUrlInput') ? document.getElementById('storyImageUrlInput').value.trim() : '';
+  const caption = (document.getElementById('storyCaptionInput') && document.getElementById('storyCaptionInput').value.trim()) || 'Khám phá Việt Nam!';
 
   const imagesToPost = (selectedStoryImagesList.length > 0) ? selectedStoryImagesList : [singleImage];
   const validImages = imagesToPost.filter(Boolean);

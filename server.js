@@ -775,16 +775,34 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// Lấy hồ sơ cá nhân, danh sách bài đánh giá và danh sách bài viết đã đăng
-app.get('/api/auth/profile/:id', async (req, res) => {
+// Lấy hồ sơ cá nhân của bất kỳ thành viên nào (Xem Profile công khai theo ID, Email hoặc Tên)
+app.get('/api/auth/user-profile', async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).populate('saved_locations');
-    if (!user) return res.status(404).json({ error: 'Không tìm thấy người dùng' });
+    const { name, email, id } = req.query;
+    let query = {};
+    if (id && mongoose.Types.ObjectId.isValid(id)) query._id = id;
+    else if (email && email.trim() !== '') query.email = email.toLowerCase().trim();
+    else if (name && name.trim() !== '') query.name = name.trim();
+    else return res.status(400).json({ error: 'Vui lòng cung cấp tên hoặc email' });
 
-    // 1. Lấy tất cả đánh giá do người dùng viết bằng Aggregation
+    let user = await User.findOne(query).populate('saved_locations');
+    const searchName = user ? user.name : (name ? name.trim() : '');
+    const searchEmail = user ? user.email.toLowerCase() : (email ? email.toLowerCase().trim() : '');
+
+    if (!user) {
+      user = {
+        name: searchName,
+        email: searchEmail,
+        avatar: '',
+        bio: 'Thành viên cộng đồng ẩm thực & du lịch FoodTravel.vn',
+        saved_locations: []
+      };
+    }
+
+    // 1. Lấy tất cả đánh giá do người này viết
     const userReviews = await Location.aggregate([
       { $unwind: '$reviews' },
-      { $match: { 'reviews.user_name': user.name } },
+      { $match: { 'reviews.user_name': searchName } },
       {
         $project: {
           location_id: '$_id',
@@ -798,23 +816,24 @@ app.get('/api/auth/profile/:id', async (req, res) => {
       { $sort: { created_at: -1 } }
     ]);
 
-    // 2. Lấy tất cả bài viết / địa điểm do người dùng đăng tải
-    const userPosts = await Location.find({
-      $or: [
-        { author_email: user.email.toLowerCase() },
-        { author_name: user.name }
-      ]
-    }).sort({ createdAt: -1 });
+    // 2. Lấy tất cả bài viết do người này đăng tải
+    const postConditions = [];
+    if (searchEmail) postConditions.push({ author_email: searchEmail });
+    if (searchName) postConditions.push({ author_name: searchName });
 
-    res.json({ 
-      user, 
-      reviews: userReviews, 
-      posts: userPosts, 
+    const userPosts = postConditions.length > 0 
+      ? await Location.find({ $or: postConditions }).sort({ createdAt: -1 })
+      : [];
+
+    res.json({
+      user,
+      reviews: userReviews,
+      posts: userPosts,
       total_posts: userPosts.length,
-      total_reviews: userReviews.length 
+      total_reviews: userReviews.length
     });
   } catch (err) {
-    res.status(500).json({ error: 'Lỗi tải trang cá nhân', details: err.message });
+    res.status(500).json({ error: 'Lỗi tải trang cá nhân thành viên', details: err.message });
   }
 });
 
@@ -1264,19 +1283,23 @@ app.get('/api/stories/:id/replies', async (req, res) => {
   }
 });
 
-// Lấy tất cả tin nhắn phản hồi từ các story của một tác giả (Hộp thư người dùng)
+// Lấy tất cả tin nhắn trong hộp thư của người dùng (Bao gồm tin nhắn NHẬN ĐƯỢC từ story của mình và tin nhắn ĐÃ GỬI cho story của người khác - phong cách Messenger)
 app.get('/api/stories/my-replies/:email', async (req, res) => {
   try {
     const { email } = req.params;
-    const stories = await Story.find({
-      user_email: email.toLowerCase().trim(),
+    const cleanEmail = email.toLowerCase().trim();
+
+    // 1. Tin nhắn người khác gửi vào Story của tôi (Incoming)
+    const myStories = await Story.find({
+      user_email: cleanEmail,
       'replies.0': { $exists: true }
     }).sort({ updatedAt: -1 });
 
-    const allReplies = [];
-    stories.forEach(s => {
+    const receivedReplies = [];
+    myStories.forEach(s => {
       (s.replies || []).forEach((r, idx) => {
-        allReplies.push({
+        receivedReplies.push({
+          type: 'received',
           story_id: s._id,
           reply_index: idx,
           story_caption: s.caption,
@@ -1285,6 +1308,7 @@ app.get('/api/stories/my-replies/:email', async (req, res) => {
           location_city: s.location_city,
           user_name: r.user_name,
           user_avatar: r.user_avatar,
+          user_email: r.user_email,
           message: r.message,
           reply_back: r.reply_back || '',
           reply_back_at: r.reply_back_at || null,
@@ -1293,7 +1317,42 @@ app.get('/api/stories/my-replies/:email', async (req, res) => {
       });
     });
 
-    res.json(allReplies);
+    // 2. Tin nhắn TÔI ĐÃ GỬI vào Story của người khác (Outgoing)
+    const othersStories = await Story.find({
+      user_email: { $ne: cleanEmail },
+      'replies.user_email': cleanEmail
+    }).sort({ updatedAt: -1 });
+
+    const sentReplies = [];
+    othersStories.forEach(s => {
+      (s.replies || []).forEach((r, idx) => {
+        if (r.user_email && r.user_email.toLowerCase() === cleanEmail) {
+          sentReplies.push({
+            type: 'sent',
+            story_id: s._id,
+            reply_index: idx,
+            story_caption: s.caption,
+            story_image: s.image,
+            story_owner_name: s.user_name,
+            story_owner_avatar: s.user_avatar,
+            location_name: s.location_name,
+            location_city: s.location_city,
+            user_name: r.user_name,
+            user_avatar: r.user_avatar,
+            message: r.message,
+            reply_back: r.reply_back || '',
+            reply_back_at: r.reply_back_at || null,
+            created_at: r.created_at
+          });
+        }
+      });
+    });
+
+    res.json({
+      received: receivedReplies,
+      sent: sentReplies,
+      all: [...receivedReplies, ...sentReplies].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    });
   } catch (err) {
     res.status(500).json({ error: 'Lỗi lấy tin nhắn phản hồi story', details: err.message });
   }

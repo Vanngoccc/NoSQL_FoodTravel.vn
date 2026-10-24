@@ -961,7 +961,7 @@
         <div class="relative group">
           <img id="profileModalAvatar" src="" class="w-20 h-20 rounded-full object-cover border-2 border-[#FF5422] shadow-md">
           <input type="file" id="avatarFileInput" accept="image/png, image/jpeg, image/jpg, image/webp" class="hidden" onchange="handleAvatarFileSelected(event)">
-          <button onclick="document.getElementById('avatarFileInput').click()" class="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-[#FF5422] text-white text-xs flex items-center justify-center shadow-md hover:bg-[#E84615] cursor-pointer" title="Tải ảnh PNG/JPG từ máy tính">
+          <button id="profileAvatarEditBtn" onclick="document.getElementById('avatarFileInput').click()" class="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-[#FF5422] text-white text-xs flex items-center justify-center shadow-md hover:bg-[#E84615] cursor-pointer" title="Tải ảnh PNG/JPG từ máy tính">
             <i class="fa-solid fa-camera"></i>
           </button>
         </div>
@@ -1009,16 +1009,24 @@
         <div id="profileSavedList" class="hidden space-y-2 max-h-52 overflow-y-auto no-scrollbar">
           <!-- Rendered by JS -->
         </div>
-        <div id="profileStoryRepliesList" class="hidden space-y-2 max-h-52 overflow-y-auto no-scrollbar">
-          <!-- Rendered by JS -->
+        <div id="profileStoryRepliesList" class="hidden space-y-2 max-h-60 overflow-y-auto no-scrollbar">
+          <!-- Thanh lọc tin nhắn: Tất cả / Nhận được / Đã gửi kiểu Messenger -->
+          <div class="flex items-center space-x-1 p-1 bg-slate-100 rounded-xl mb-2 text-[10px] font-bold">
+            <button id="btnMsgFilterAll" onclick="filterProfileMessages('all')" class="flex-1 py-1 rounded-lg bg-white text-slate-800 shadow-2xs transition-all">Tất cả</button>
+            <button id="btnMsgFilterReceived" onclick="filterProfileMessages('received')" class="flex-1 py-1 rounded-lg text-slate-500 hover:text-slate-800 transition-all">Nhận được</button>
+            <button id="btnMsgFilterSent" onclick="filterProfileMessages('sent')" class="flex-1 py-1 rounded-lg text-slate-500 hover:text-slate-800 transition-all">Đã gửi</button>
+          </div>
+          <div id="profileMessagesInnerList" class="space-y-2">
+            <!-- Rendered by JS -->
+          </div>
         </div>
       </div>
 
       <div class="pt-2 flex items-center justify-between">
-        <button onclick="logoutUser()" class="px-4 py-2 rounded-xl text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 cursor-pointer">
+        <button id="profileLogoutBtn" onclick="logoutUser()" class="px-4 py-2 rounded-xl text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 cursor-pointer">
           <i class="fa-solid fa-arrow-right-from-bracket mr-1"></i> Đăng xuất
         </button>
-        <button onclick="closeProfileModal()" class="px-5 py-2 rounded-xl text-xs font-bold bg-slate-900 text-white cursor-pointer">Đóng</button>
+        <button onclick="closeProfileModal()" class="px-5 py-2 rounded-xl text-xs font-bold bg-slate-900 text-white cursor-pointer ml-auto">Đóng</button>
       </div>
     </div>
   </div>
@@ -1218,7 +1226,7 @@
         <!-- Cột phải: Form tùy chỉnh Story -->
         <div class="space-y-3 text-xs">
           
-          <!-- Chọn ảnh tải lên (hỗ trợ chọn nhiều ảnh cùng lúc) hoặc chọn từ địa điểm có sẵn -->
+          <!-- Chọn ảnh tải lên (hỗ trợ chọn 1 hoặc nhiều ảnh cùng lúc phong cách Facebook) -->
           <div>
             <div class="flex items-center justify-between mb-1">
               <label class="font-bold text-slate-700 block">Hình ảnh khoảnh khắc *</label>
@@ -1226,20 +1234,25 @@
             </div>
             <div class="flex items-center space-x-2">
               <input type="file" id="storyImageFile" accept="image/*" multiple class="hidden" onchange="handleStoryImageUpload(event)">
-              <button onclick="document.getElementById('storyImageFile').click()" class="flex-1 py-2 px-3 border border-slate-200 rounded-xl bg-slate-50 hover:bg-slate-100 font-semibold text-slate-700 flex items-center justify-center space-x-1.5 cursor-pointer">
-                <i class="fa-solid fa-images text-[#FF5422]"></i>
-                <span>Tải ảnh từ máy (chọn 1 hoặc nhiều ảnh)</span>
+              <button type="button" onclick="document.getElementById('storyImageFile').click()" class="flex-1 py-2.5 px-3 border border-dashed border-[#FF5422]/50 rounded-xl bg-orange-50/40 hover:bg-orange-50 font-semibold text-slate-700 flex items-center justify-center space-x-2 cursor-pointer transition-colors">
+                <i class="fa-solid fa-cloud-arrow-up text-[#FF5422] text-sm"></i>
+                <span id="storyUploadBtnText">Tải ảnh từ máy (chọn 1 hoặc nhiều ảnh)</span>
               </button>
             </div>
-            <input type="text" id="storyImageUrlInput" placeholder="Hoặc dán liên kết ảnh /uploads/locations/..." oninput="updateStoryPreviewImage(this.value)" class="w-full mt-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-[#FF5422]">
+            <input type="hidden" id="storyImageUrlInput" value="">
+            <!-- Dải ảnh thu nhỏ xem trước khi chọn nhiều ảnh -->
+            <div id="storyUploadThumbnailsStrip" class="hidden flex items-center gap-2 mt-2 overflow-x-auto py-1 no-scrollbar"></div>
           </div>
 
-          <!-- Check-in địa điểm -->
+          <!-- Check-in địa điểm tự do phong cách Facebook (Tùy chọn, không bắt buộc, không đổi ảnh) -->
           <div>
-            <label class="font-bold text-slate-700 block mb-1">Địa điểm check-in *</label>
-            <select id="storyLocationSelect" onchange="handleStoryLocationSelect(this)" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-[#FF5422] font-semibold text-slate-700">
-              <!-- Rendered dynamically from 100 locations -->
-            </select>
+            <label class="font-bold text-slate-700 block mb-1">Địa điểm check-in (Tùy chọn)</label>
+            <div class="relative">
+              <input type="text" id="storyLocationInput" list="storyLocationDatalist" placeholder="Nhập địa điểm check-in (Ví dụ: Sophia, TP.HCM)..." oninput="handleStoryLocationCustomInput(this.value)" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-[#FF5422] font-semibold text-slate-700 text-xs">
+              <datalist id="storyLocationDatalist">
+                <!-- Rendered dynamically from locations -->
+              </datalist>
+            </div>
           </div>
 
           <!-- Caption -->
