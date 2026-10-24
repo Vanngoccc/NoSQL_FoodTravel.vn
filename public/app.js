@@ -78,6 +78,21 @@ async function syncCurrentUserFromDB() {
 document.addEventListener('DOMContentLoaded', () => {
   updateUserUI();
   syncCurrentUserFromDB();
+
+  // Tải từ điển Avatar đồng bộ tất cả thành viên từ MongoDB
+  fetch('/api/auth/all-avatars')
+    .then(r => r.json())
+    .then(map => {
+      if (map && typeof map === 'object') {
+        window.userAvatarMap = map;
+        updateUserUI();
+        if (allLocations && allLocations.length > 0) {
+          renderLocationsPage();
+        }
+      }
+    })
+    .catch(e => console.warn('Lỗi tải all-avatars:', e));
+
   fetchHeroOverviewStats();
   fetchStories();
   fetchLocations();
@@ -160,16 +175,33 @@ function filterByTag(type, keyword) {
 // =====================================================================
 // ĐỒNG BỘ AVATAR VÀ THÔNG BÁO THỜI GIAN THỰC (MONGODB)
 // =====================================================================
+window.userAvatarMap = window.userAvatarMap || {};
+
 function getConsistentAvatar(name, customAvatar) {
-  // Nếu là chính người dùng đang đăng nhập thì luôn ưu tiên avatar thực tế của họ
-  if (currentUser && currentUser.name && name && currentUser.name.toLowerCase().trim() === name.toLowerCase().trim() && currentUser.avatar) {
+  const clean = (name || '').trim();
+  const cleanLower = clean.toLowerCase();
+
+  // 1. Nếu là chính người dùng đang đăng nhập thì luôn ưu tiên avatar thực tế của họ
+  if (currentUser && currentUser.name && currentUser.name.toLowerCase().trim() === cleanLower && currentUser.avatar) {
     return currentUser.avatar;
   }
-  // Bỏ qua placeholder ảnh nam Unsplash mặc định photo-1535713875002-d1d0cf377fde
-  if (customAvatar && customAvatar.trim() && !customAvatar.includes('default') && !customAvatar.includes('photo-1535713875002-d1d0cf377fde') && (customAvatar.startsWith('http') || customAvatar.startsWith('/uploads'))) {
+
+  // 2. Tra cứu từ từ điển Avatar toàn cục đã đồng bộ từ User collection MongoDB
+  if (window.userAvatarMap && window.userAvatarMap[cleanLower]) {
+    return window.userAvatarMap[cleanLower];
+  }
+
+  // 3. Nếu có customAvatar hợp lệ (Data URL, URL ảnh thật, uploads) và không phải ui-avatars hay placeholder mặc định
+  if (customAvatar && customAvatar.trim() && 
+      !customAvatar.includes('ui-avatars.com') && 
+      !customAvatar.includes('photo-1535713875002-d1d0cf377fde') && 
+      !customAvatar.includes('default') &&
+      (customAvatar.startsWith('http') || customAvatar.startsWith('/uploads') || customAvatar.startsWith('data:image/'))) {
     return customAvatar;
   }
-  const cleanName = (name || 'FoodTravel').trim();
+
+  // 4. Fallback avatar theo tên
+  const cleanName = clean || 'FoodTravel';
   const colors = ['FF5422', '0ea5e9', '10b981', '8b5cf6', 'f59e0b', 'ec4899', '06b6d4', '3b82f6'];
   let hash = 0;
   for (let i = 0; i < cleanName.length; i++) {
@@ -521,6 +553,18 @@ async function openProfileModal(initialTab = 'posts') {
       currentUser = { ...currentUser, ...userData };
       localStorage.setItem('foodtravel_user', JSON.stringify(currentUser));
 
+      // Fallback nếu userPosts rỗng từ API nhưng có trong allLocations
+      if ((!userPosts || userPosts.length === 0) && typeof allLocations !== 'undefined' && allLocations && allLocations.length > 0) {
+        const cName = (currentUser.name || '').trim().toLowerCase();
+        const cEmail = (currentUser.email || '').trim().toLowerCase();
+        userPosts = allLocations.filter(loc => {
+          const aName = (loc.author_name || '').trim().toLowerCase();
+          const aEmail = (loc.author_email || '').trim().toLowerCase();
+          return (cName && (aName === cName || (cName.includes('ngọc') && aName.includes('ngọc')))) ||
+                 (cEmail && aEmail === cEmail);
+        });
+      }
+
       const postCountEl = document.getElementById('profilePostCount');
       const revCountEl = document.getElementById('profileReviewCount');
       const savedCountEl = document.getElementById('profileSavedCount');
@@ -843,8 +887,20 @@ async function openUserProfile(name, email, event) {
     if (res.ok) {
       const data = await res.json();
       const user = data.user || {};
-      const posts = data.posts || [];
+      let posts = data.posts || [];
       const reviews = data.reviews || [];
+
+      // Fallback nếu posts rỗng từ API nhưng có trong allLocations
+      if ((!posts || posts.length === 0) && typeof allLocations !== 'undefined' && allLocations && allLocations.length > 0) {
+        const tName = (name || '').trim().toLowerCase();
+        const tEmail = (email || '').trim().toLowerCase();
+        posts = allLocations.filter(loc => {
+          const aName = (loc.author_name || '').trim().toLowerCase();
+          const aEmail = (loc.author_email || '').trim().toLowerCase();
+          return (tName && (aName === tName || (tName.includes('ngọc') && aName.includes('ngọc')))) ||
+                 (tEmail && aEmail === tEmail);
+        });
+      }
 
       if (user.avatar) document.getElementById('profileModalAvatar').src = getConsistentAvatar(user.name || name, user.avatar);
       if (user.bio) document.getElementById('profileModalBio').textContent = user.bio;
@@ -3001,6 +3057,13 @@ async function fetchStories() {
 function renderFigmaHeroStories() {
   if (!allStories || allStories.length === 0) return;
 
+  const fallbackHero = [
+    'https://images.unsplash.com/photo-1582878826629-29b7ad1cdc43?w=800',
+    'https://images.unsplash.com/photo-1559592413-7cec4d0cae2b?w=800',
+    'https://images.unsplash.com/photo-1528127269322-539801943592?w=800',
+    'https://images.unsplash.com/photo-1576577445504-6af96477db52?w=800'
+  ];
+
   const s0 = allStories[0];
   const s1 = allStories[1] || s0;
   const s2 = allStories[2] || s0;
@@ -3010,8 +3073,9 @@ function renderFigmaHeroStories() {
   const img0 = document.getElementById('heroMosaicImg_0');
   const like0 = document.getElementById('heroMosaicLike_0');
   if (img0 && s0) {
-    img0.src = s0.image;
-    img0.alt = s0.location_name;
+    img0.onerror = function() { this.onerror = null; this.src = fallbackHero[0]; };
+    img0.src = s0.image || fallbackHero[0];
+    img0.alt = s0.location_name || 'Việt Nam';
   }
   if (like0 && s0) {
     like0.textContent = s0.likes_count || 0;
@@ -3021,8 +3085,9 @@ function renderFigmaHeroStories() {
   const img1 = document.getElementById('heroMosaicImg_1');
   const loc1 = document.getElementById('heroMosaicLoc_1');
   if (img1 && s1) {
-    img1.src = s1.image;
-    img1.alt = s1.location_name;
+    img1.onerror = function() { this.onerror = null; this.src = fallbackHero[1]; };
+    img1.src = s1.image || fallbackHero[1];
+    img1.alt = s1.location_name || 'Hội An';
   }
   if (loc1 && s1) {
     loc1.textContent = s1.location_name || 'Hội An';
@@ -3032,8 +3097,9 @@ function renderFigmaHeroStories() {
   const img2 = document.getElementById('heroMosaicImg_2');
   const loc2 = document.getElementById('heroMosaicLoc_2');
   if (img2 && s2) {
-    img2.src = s2.image;
-    img2.alt = s2.location_name;
+    img2.onerror = function() { this.onerror = null; this.src = fallbackHero[2]; };
+    img2.src = s2.image || fallbackHero[2];
+    img2.alt = s2.location_name || 'Hạ Long';
   }
   if (loc2 && s2) {
     loc2.textContent = s2.location_name || 'Hạ Long';
@@ -3043,8 +3109,9 @@ function renderFigmaHeroStories() {
   const img3 = document.getElementById('heroMosaicImg_3');
   const like3 = document.getElementById('heroMosaicLike_3');
   if (img3 && s3) {
-    img3.src = s3.image;
-    img3.alt = s3.location_name;
+    img3.onerror = function() { this.onerror = null; this.src = fallbackHero[3]; };
+    img3.src = s3.image || fallbackHero[3];
+    img3.alt = s3.location_name || 'Việt Nam';
   }
   if (like3 && s3) {
     like3.textContent = s3.likes_count || 0;

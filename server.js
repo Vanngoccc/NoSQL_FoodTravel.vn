@@ -22,17 +22,9 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-// Cấu hình Multer lưu trữ file ảnh (PNG, JPG, JPEG, WEBP)
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const uniqueName = 'upload-' + Date.now() + '-' + Math.round(Math.random() * 1E6) + ext;
-    cb(null, uniqueName);
-  }
-});
+// Cấu hình Multer Memory Storage để lưu ảnh vĩnh viễn dạng Base64 vào MongoDB
+// (Tránh bị Render xóa mất file khi redeploy / push git trên ephemeral filesystem)
+const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
   const allowed = ['.png', '.jpg', '.jpeg', '.jpe', '.jfif', '.webp', '.bmp', '.gif', '.svg'];
@@ -47,18 +39,18 @@ const fileFilter = (req, file, cb) => {
 
 const upload = multer({
   storage: storage,
-  limits: { fileSize: 15 * 1024 * 1024 }, // Tối đa 15MB
+  limits: { fileSize: 10 * 1024 * 1024 }, // Tối đa 10MB
   fileFilter: fileFilter
 });
 
 // Middleware
 app.use(cors());
-app.use(express.json({ limit: '20mb' }));
-app.use(express.urlencoded({ extended: true, limit: '20mb' }));
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(uploadDir));
 
-// API Tải file ảnh thực tế đơn lẻ
+// API Tải file ảnh thực tế đơn lẻ (Trả về Data URL Base64 để lưu vĩnh viễn trong MongoDB Atlas)
 app.post('/api/upload', (req, res) => {
   upload.single('image')(req, res, (err) => {
     if (err) {
@@ -67,12 +59,27 @@ app.post('/api/upload', (req, res) => {
     if (!req.file) {
       return res.status(400).json({ error: 'Vui lòng chọn file ảnh hợp lệ' });
     }
-    const fileUrl = `/uploads/${req.file.filename}`;
-    res.json({
-      message: 'Tải file ảnh lên thành công',
-      url: fileUrl,
-      filename: req.file.filename
-    });
+
+    try {
+      const ext = path.extname(req.file.originalname).toLowerCase() || '.jpg';
+      const uniqueName = 'upload-' + Date.now() + '-' + Math.round(Math.random() * 1E6) + ext;
+      
+      // Lưu bản sao lên đĩa cục bộ (nếu có thể)
+      fs.writeFile(path.join(uploadDir, uniqueName), req.file.buffer, () => {});
+
+      // Tạo Data URL Base64 bền vững, không bao giờ bị Render xóa mất khi restart
+      const mime = req.file.mimetype || 'image/jpeg';
+      const base64Url = `data:${mime};base64,${req.file.buffer.toString('base64')}`;
+
+      res.json({
+        message: 'Tải file ảnh lên thành công',
+        url: base64Url,
+        localPath: `/uploads/${uniqueName}`,
+        filename: uniqueName
+      });
+    } catch (e) {
+      res.status(500).json({ error: 'Lỗi mã hóa ảnh: ' + e.message });
+    }
   });
 });
 
@@ -85,19 +92,132 @@ app.post('/api/upload-multiple', (req, res) => {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: 'Vui lòng chọn ít nhất một file ảnh' });
     }
-    const urls = req.files.map(f => `/uploads/${f.filename}`);
-    res.json({
-      message: `Tải thành công ${req.files.length} ảnh`,
-      urls: urls,
-      files: req.files.map(f => ({ url: `/uploads/${f.filename}`, filename: f.filename }))
-    });
+
+    try {
+      const urls = req.files.map(f => {
+        const ext = path.extname(f.originalname).toLowerCase() || '.jpg';
+        const uniqueName = 'upload-' + Date.now() + '-' + Math.round(Math.random() * 1E6) + ext;
+        fs.writeFile(path.join(uploadDir, uniqueName), f.buffer, () => {});
+        const mime = f.mimetype || 'image/jpeg';
+        return `data:${mime};base64,${f.buffer.toString('base64')}`;
+      });
+
+      res.json({
+        message: `Tải thành công ${req.files.length} ảnh`,
+        urls: urls
+      });
+    } catch (e) {
+      res.status(500).json({ error: 'Lỗi mã hóa hàng loạt ảnh: ' + e.message });
+    }
   });
 });
 
+// Tự động gán tác giả và đồng bộ Avatar tác giả từ User sang Location
+async function syncAuthorAvatars() {
+  try {
+    const users = await User.find({}, 'name email avatar').lean();
+    if (!users || users.length === 0) return;
+
+    // 1. Gán tác giả thực tế cho các bài viết chưa có tác giả
+    const unassignedLocs = await Location.find({
+      $or: [
+        { author_name: { $exists: false } },
+        { author_name: null },
+        { author_name: '' },
+        { author_name: 'Thành viên FoodTravel' },
+        { author_name: 'Người khám phá' }
+      ]
+    });
+
+    if (unassignedLocs.length > 0) {
+      const hvnUser = users.find(u => u.name && u.name.includes('Huỳnh Văn Ngọc')) || users[0];
+      const otherUsers = users.filter(u => u.email !== hvnUser.email);
+
+      for (let i = 0; i < unassignedLocs.length; i++) {
+        const loc = unassignedLocs[i];
+        const assignedUser = (i % 3 === 0 || i < 15) ? hvnUser : (otherUsers[i % otherUsers.length] || hvnUser);
+        loc.author_name = assignedUser.name;
+        loc.author_email = assignedUser.email;
+        loc.author_avatar = assignedUser.avatar || '';
+        await loc.save();
+      }
+      console.log(`✅ Đã gán tác giả cho ${unassignedLocs.length} bài viết`);
+    }
+
+    // 2. Đồng bộ avatar mới nhất từ User vào Locations & Reviews
+    for (const u of users) {
+      if (u.avatar && !u.avatar.includes('default') && !u.avatar.includes('photo-1535713875002-d1d0cf377fde')) {
+        await Location.updateMany(
+          {
+            $or: [
+              { author_email: new RegExp(`^${u.email.trim()}$`, 'i') },
+              { author_name: new RegExp(`^${u.name.trim()}$`, 'i') }
+            ]
+          },
+          { $set: { author_avatar: u.avatar } }
+        );
+
+        await Location.updateMany(
+          { 'reviews.user_name': new RegExp(`^${u.name.trim()}$`, 'i') },
+          { $set: { 'reviews.$[elem].avatar': u.avatar } },
+          { arrayFilters: [{ 'elem.user_name': new RegExp(`^${u.name.trim()}$`, 'i') }] }
+        );
+      }
+    }
+    console.log('✅ Đã đồng bộ toàn bộ avatar tác giả vào Locations');
+  } catch (err) {
+    console.warn('Lỗi syncAuthorAvatars:', err.message);
+  }
+}
+
+// Phục hồi các Story bị mất ảnh do Render xóa file tạm
+async function repairMissingStoryImages() {
+  try {
+    const fallbackImages = [
+      'https://images.unsplash.com/photo-1528127269322-539801943592?w=800',
+      'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800',
+      'https://images.unsplash.com/photo-1559592413-7cec4d0cae2b?w=800',
+      'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800'
+    ];
+    const stories = await Story.find({});
+    for (let i = 0; i < stories.length; i++) {
+      const s = stories[i];
+      if (s.image && s.image.startsWith('/uploads/')) {
+        const localPath = path.join(__dirname, 'public', s.image);
+        if (!fs.existsSync(localPath)) {
+          s.image = fallbackImages[i % fallbackImages.length];
+          await s.save();
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Lỗi repairMissingStoryImages:', e.message);
+  }
+}
+
 // Kết nối MongoDB
 mongoose.connect(MONGO_URI)
-  .then(() => console.log('✅ Kết nối MongoDB thành công: ' + MONGO_URI))
+  .then(() => {
+    console.log('✅ Kết nối MongoDB thành công: ' + MONGO_URI);
+    syncAuthorAvatars();
+    repairMissingStoryImages();
+  })
   .catch(err => console.error('❌ Lỗi kết nối MongoDB:', err));
+
+// API Lấy danh mục Avatar tất cả người dùng (Để đồng bộ tuyệt đối trên toàn giao diện)
+app.get('/api/auth/all-avatars', async (req, res) => {
+  try {
+    const users = await User.find({}, 'name email avatar').lean();
+    const avatarMap = {};
+    users.forEach(u => {
+      if (u.name && u.avatar) avatarMap[u.name.toLowerCase().trim()] = u.avatar;
+      if (u.email && u.avatar) avatarMap[u.email.toLowerCase().trim()] = u.avatar;
+    });
+    res.json(avatarMap);
+  } catch (err) {
+    res.json({});
+  }
+});
 
 // =====================================================================
 // 1. API TRẠNG THÁI HỆ THỐNG
