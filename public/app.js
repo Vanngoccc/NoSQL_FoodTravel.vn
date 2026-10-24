@@ -893,9 +893,9 @@ function renderLocationsPage() {
       (loc.author_name && currentUser.name && loc.author_name.toLowerCase() === currentUser.name.toLowerCase())
     );
 
-    const authorName = (loc.author_name && loc.author_name.trim() && loc.author_name !== 'Thành viên FoodTravel') 
+    const authorName = (loc.author_name && loc.author_name.trim() && loc.author_name !== 'Thành viên FoodTravel' && loc.author_name !== 'Người khám phá') 
       ? loc.author_name 
-      : (isMyPost ? currentUser.name : (loc.reviews && loc.reviews.length > 0 && loc.reviews[0].user_name ? loc.reviews[0].user_name : 'Người khám phá'));
+      : (isMyPost ? currentUser.name : (loc.reviews && loc.reviews.length > 0 && loc.reviews[0].user_name ? loc.reviews[0].user_name : (currentUser ? currentUser.name : 'Huỳnh Văn Ngọc')));
     const authorAvatar = getConsistentAvatar(authorName, loc.author_avatar);
     const timeAgoStr = formatPostTime(loc.createdAt);
 
@@ -1753,9 +1753,9 @@ async function openLocationModal(locId) {
       (loc.author_name && currentUser.name && loc.author_name.toLowerCase() === currentUser.name.toLowerCase())
     );
 
-    const authorName = (loc.author_name && loc.author_name.trim() && loc.author_name !== 'Thành viên FoodTravel') 
+    const authorName = (loc.author_name && loc.author_name.trim() && loc.author_name !== 'Thành viên FoodTravel' && loc.author_name !== 'Người khám phá') 
       ? loc.author_name 
-      : (isMyPost ? currentUser.name : (loc.reviews && loc.reviews.length > 0 && loc.reviews[0].user_name ? loc.reviews[0].user_name : 'Người khám phá'));
+      : (isMyPost ? currentUser.name : (loc.reviews && loc.reviews.length > 0 && loc.reviews[0].user_name ? loc.reviews[0].user_name : (currentUser ? currentUser.name : 'Huỳnh Văn Ngọc')));
     const authorAvatar = getConsistentAvatar(authorName, loc.author_avatar);
 
     const modalAuthorName = document.getElementById('modalAuthorName');
@@ -2638,7 +2638,7 @@ async function submitNewLocation() {
     return;
   }
 
-  const authorName = currentUser ? currentUser.name : 'Người khám phá';
+  const authorName = currentUser ? currentUser.name : 'Huỳnh Văn Ngọc';
   const authorAvatar = currentUser ? currentUser.avatar : '';
   const authorEmail = currentUser ? currentUser.email : '';
 
