@@ -48,6 +48,28 @@
     .animate-float-up {
       animation: floatUp 1.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
     }
+    /* Giao diện dropdown/select cao cấp, đồng bộ và thẩm mỹ */
+    select {
+      background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2364748b' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e") !important;
+      background-position: right 0.75rem center !important;
+      background-repeat: no-repeat !important;
+      background-size: 1.15em 1.15em !important;
+      padding-right: 2.4rem !important;
+      -webkit-appearance: none !important;
+      -moz-appearance: none !important;
+      appearance: none !important;
+      cursor: pointer;
+      box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    select:hover {
+      border-color: #cbd5e1 !important;
+      box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.06);
+    }
+    select:focus {
+      border-color: #FF5422 !important;
+      box-shadow: 0 0 0 3px rgba(255, 84, 34, 0.15) !important;
+    }
   </style>
 </head>
 <body class="bg-[#FBFBFC] text-[#1E293B] min-h-screen flex flex-col antialiased">
@@ -99,6 +121,30 @@
           <i class="fa-solid fa-camera text-xs"></i>
           <span>Chia sẻ bài viết</span>
         </button>
+
+        <!-- Nút Thông báo (Notifications) thời gian thực kết nối MongoDB -->
+        <div class="relative">
+          <button id="btnNotifBell" onclick="toggleNotificationDropdown()" class="relative w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-colors cursor-pointer" title="Thông báo mới">
+            <i class="fa-regular fa-bell text-sm"></i>
+            <span id="notifBadgeCount" class="hidden absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-[#FF5422] text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-white">0</span>
+          </button>
+
+          <!-- Dropdown thông báo -->
+          <div id="notificationDropdown" class="hidden absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div class="p-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div class="flex items-center space-x-2">
+                <span class="font-extrabold text-xs text-slate-900">Thông báo cộng đồng</span>
+                <span id="notifTotalBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-[#FF5422]/10 text-[#FF5422] font-bold">0 mới</span>
+              </div>
+              <button onclick="markAllNotificationsAsRead()" class="text-[11px] text-[#FF5422] hover:underline font-bold cursor-pointer">
+                Đánh dấu đã đọc
+              </button>
+            </div>
+            <div id="notifListContainer" class="max-h-80 overflow-y-auto divide-y divide-slate-50">
+              <div class="p-6 text-center text-xs text-slate-400">Đang tải thông báo...</div>
+            </div>
+          </div>
+        </div>
 
         <!-- Khu vực Tài khoản người dùng (Kết nối MongoDB) -->
         <div id="userAccountSection" class="flex items-center space-x-2">
@@ -611,6 +657,11 @@
         <i id="modalBannerSaveIcon" class="fa-regular fa-bookmark text-sm text-amber-500"></i>
       </button>
 
+      <!-- Nút Xóa bài viết nổi trên Banner (Chỉ hiện nếu là chủ bài viết - dạng thùng rác icon theo yêu cầu) -->
+      <button id="modalBannerDeleteBtn" onclick="deleteLocation(activeLocationId)" title="Xóa bài viết của bạn" class="hidden absolute top-4 right-40 z-20 w-9 h-9 rounded-full bg-white/90 hover:bg-rose-50 text-slate-700 hover:text-rose-600 flex items-center justify-center transition-all cursor-pointer shadow-md hover:scale-105">
+        <i class="fa-regular fa-trash-can text-sm"></i>
+      </button>
+
       <!-- Banner Ảnh -->
       <div class="relative h-64 sm:h-72 w-full bg-slate-900">
         <img id="modalImg" src="" alt="Địa điểm" class="w-full h-full object-cover">
@@ -659,14 +710,14 @@
           </div>
         </div>
 
-        <!-- Thông tin Tác giả đăng bài & Thời gian đăng & Nút xóa nếu là chủ bài viết -->
+        <!-- Thông tin Tác giả đăng bài & Thời gian đăng -->
         <div class="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100">
           <div class="flex items-center space-x-2.5">
             <img id="modalAuthorAvatar" src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100" class="w-9 h-9 rounded-full object-cover border border-[#FF5422]">
             <div>
               <div class="flex items-center space-x-2">
                 <span id="modalAuthorName" class="text-xs font-bold text-slate-900">Thành viên FoodTravel</span>
-                <span class="text-[9px] px-1.5 py-0.5 bg-rose-50 text-rose-600 font-bold rounded-md">Tác giả</span>
+                <span id="modalAuthorBadge" class="hidden text-[9px] px-1.5 py-0.5 bg-rose-50 text-rose-600 font-bold rounded-md">Bài của bạn</span>
               </div>
               <span class="text-[10px] text-slate-400 flex items-center space-x-1 mt-0.5">
                 <i class="fa-regular fa-clock text-[9px]"></i>
@@ -674,54 +725,51 @@
               </span>
             </div>
           </div>
-          <button id="modalDeleteBtn" onclick="deleteLocation(activeLocationId)" class="hidden px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs cursor-pointer transition-colors">
-            <i class="fa-solid fa-trash-can mr-1"></i> Xóa bài
-          </button>
         </div>
 
         <p id="modalDescription" class="text-xs sm:text-sm text-slate-600 leading-relaxed font-normal"></p>
 
-        <!-- Form Viết đánh giá kiểu Google Play (Chạm trực tiếp 1-5 sao, không dùng dropdown) -->
-        <div class="bg-gradient-to-br from-[#FFF9F6] to-white p-4 sm:p-5 rounded-2xl border border-[#FBECE6] space-y-3.5">
-          <div class="flex items-center justify-between">
-            <h4 class="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center space-x-1.5">
-              <i class="fa-solid fa-pen-nib text-[#FF5422]"></i>
-              <span>Viết đánh giá của bạn</span>
-            </h4>
-            <div class="flex items-center space-x-2 text-xs font-semibold text-slate-700">
-              <img id="reviewUserAvatar" src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100" class="w-5 h-5 rounded-full object-cover">
-              <span id="inputReviewUserDisplay">Huỳnh Văn Ngọc</span>
-              <input type="hidden" id="inputReviewUser" value="Huỳnh Văn Ngọc">
-            </div>
-          </div>
-
-          <!-- Bộ chọn sao Google Play Interactive -->
-          <div class="bg-white p-3.5 rounded-2xl border border-slate-200/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
-            <div class="flex items-center space-x-2.5">
-              <span class="text-xs text-slate-500 font-medium">Chấm điểm:</span>
-              <div id="starRatingGroup" class="flex items-center space-x-1.5 cursor-pointer select-none">
-                <i data-value="1" class="star-rate-item fa-solid fa-star text-2xl text-amber-400 transition-all hover:scale-125"></i>
-                <i data-value="2" class="star-rate-item fa-solid fa-star text-2xl text-amber-400 transition-all hover:scale-125"></i>
-                <i data-value="3" class="star-rate-item fa-solid fa-star text-2xl text-amber-400 transition-all hover:scale-125"></i>
-                <i data-value="4" class="star-rate-item fa-solid fa-star text-2xl text-amber-400 transition-all hover:scale-125"></i>
-                <i data-value="5" class="star-rate-item fa-solid fa-star text-2xl text-amber-400 transition-all hover:scale-125"></i>
+        <!-- Form Viết đánh giá & Bình luận kiểu Facebook nguyên khối (Ảnh 2 người dùng yêu cầu: Enter gửi, Shift+Enter xuống dòng) -->
+        <div class="space-y-2.5">
+          <!-- Thanh chọn sao chấm điểm nhanh -->
+          <div class="flex items-center justify-between px-1">
+            <div class="flex items-center space-x-2">
+              <span class="text-xs text-slate-500 font-semibold">Chấm điểm:</span>
+              <div id="starRatingGroup" class="flex items-center space-x-1 cursor-pointer select-none">
+                <i data-value="1" class="star-rate-item fa-solid fa-star text-base text-amber-400 transition-all hover:scale-125"></i>
+                <i data-value="2" class="star-rate-item fa-solid fa-star text-base text-amber-400 transition-all hover:scale-125"></i>
+                <i data-value="3" class="star-rate-item fa-solid fa-star text-base text-amber-400 transition-all hover:scale-125"></i>
+                <i data-value="4" class="star-rate-item fa-solid fa-star text-base text-amber-400 transition-all hover:scale-125"></i>
+                <i data-value="5" class="star-rate-item fa-solid fa-star text-base text-amber-400 transition-all hover:scale-125"></i>
               </div>
             </div>
-            <div id="starRatingLabel" class="text-xs font-bold text-[#FF5422]">
-              5 sao - Tuyệt vời
-            </div>
+            <span id="starRatingLabel" class="text-xs font-bold text-[#FF5422]">5 sao - Tuyệt vời</span>
             <input type="hidden" id="inputReviewRating" value="5">
           </div>
 
-          <textarea id="inputReviewContent" rows="2" placeholder="Chia sẻ cảm nhận thực tế của bạn về chất lượng món ăn, không gian, dịch vụ..." 
-                    class="w-full px-3.5 py-2.5 bg-white rounded-xl border border-slate-200 outline-none text-xs focus:border-[#FF5422] transition-colors"></textarea>
-
-          <div class="flex justify-end">
-            <button onclick="submitReview()" class="px-5 py-2.5 bg-[#FF5422] hover:bg-[#E84615] text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-[#FF5422]/20 flex items-center space-x-1.5 cursor-pointer">
-              <i class="fa-solid fa-paper-plane"></i>
-              <span>Gửi đánh giá</span>
-            </button>
+          <!-- Khung bình luận nguyên khối chuẩn Ảnh 2 -->
+          <div class="flex items-start space-x-2.5">
+            <img id="reviewUserAvatar" src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100" class="w-8 h-8 rounded-full object-cover shrink-0 mt-1 border border-slate-200">
+            
+            <div class="flex-1 bg-slate-100 hover:bg-slate-100/90 focus-within:bg-white focus-within:ring-2 focus-within:ring-[#FF5422]/20 focus-within:border-[#FF5422] border border-slate-200 rounded-2xl px-3.5 py-2 transition-all">
+              <textarea id="inputReviewContent" rows="1" 
+                placeholder="Bình luận dưới tên bạn..." 
+                class="w-full bg-transparent outline-none text-xs text-slate-800 placeholder-slate-400 resize-none font-medium leading-relaxed block max-h-32"
+                onkeydown="handleReviewKeydown(event)"></textarea>
+              
+              <div class="flex items-center justify-between pt-1.5 border-t border-slate-200/60 mt-1">
+                <div class="flex items-center space-x-3 text-slate-400 text-sm">
+                  <span class="hover:text-slate-600 cursor-pointer" title="Cảm xúc"><i class="fa-regular fa-face-smile"></i></span>
+                  <span class="hover:text-slate-600 cursor-pointer" title="Hình ảnh"><i class="fa-solid fa-camera"></i></span>
+                  <span class="text-[10px] text-slate-400 italic hidden sm:inline">Nhấn Enter để gửi, Shift+Enter để xuống dòng</span>
+                </div>
+                <button onclick="submitReview()" class="w-7 h-7 rounded-full bg-[#FF5422] hover:bg-[#E84615] text-white flex items-center justify-center transition-all shadow-xs cursor-pointer" title="Gửi đánh giá">
+                  <i class="fa-solid fa-paper-plane text-[11px]"></i>
+                </button>
+              </div>
+            </div>
           </div>
+          <input type="hidden" id="inputReviewUser" value="">
         </div>
 
         <!-- Danh sách đánh giá & Phản hồi phân cấp -->
@@ -813,6 +861,10 @@
                 <option value="Park">Công viên</option>
               </select>
             </div>
+          </div>
+
+          <div>
+            <input type="text" id="newLocAddress" placeholder="Địa chỉ cụ thể (Ví dụ: 123 Nguyễn Huệ, Quận 1 - hoặc để trống tự điền theo thành phố)" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:border-[#FF5422] font-medium text-slate-700 text-xs placeholder:text-slate-400">
           </div>
 
           <!-- Hiển thị tọa độ tự động (Định vị GPS thực tế + Lựa chọn chấm điểm bản đồ) -->

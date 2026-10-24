@@ -10,6 +10,7 @@ const fs = require('fs');
 const Location = require('./models/Location');
 const User = require('./models/User');
 const Story = require('./models/Story');
+const Notification = require('./models/Notification');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -428,21 +429,21 @@ app.post('/api/locations', async (req, res) => {
       name,
       category: category || 'Attraction',
       city,
-      address: address || `${name}, ${city}`,
+      address: (address && address.trim()) ? address.trim() : city,
       description: description || `Địa điểm du lịch và ẩm thực hấp dẫn tại ${city}`,
       price_range: price_range || 'MODERATE',
       images: locationImages,
-      author_name: author_name || 'Thành viên FoodTravel',
+      author_name: (author_name && author_name.trim()) ? author_name.trim() : 'Thành viên FoodTravel',
       author_email: author_email ? author_email.toLowerCase().trim() : '',
       author_avatar: author_avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
       location: {
         type: 'Point',
         coordinates: [parseFloat(lng), parseFloat(lat)]
       },
-      rating_avg: 5.0,
+      rating_avg: 0,
       total_reviews: 0,
-      likes_count: 1,
-      liked_by: author_email ? [author_email.toLowerCase().trim()] : [],
+      likes_count: 0,
+      liked_by: [],
       reviews: []
     });
 
@@ -482,11 +483,31 @@ app.delete('/api/locations/:id', async (req, res) => {
 });
 
 // =====================================================================
+// HELPER: TẠO THÔNG BÁO THỜI GIAN THỰC (MONGODB NOTIFICATIONS)
+// =====================================================================
+async function createNotification({ recipient_email, sender_name, sender_avatar, type, title, content, target_id }) {
+  try {
+    if (!recipient_email || !sender_name) return;
+    await Notification.create({
+      recipient_email: recipient_email.toLowerCase().trim(),
+      sender_name: sender_name.trim(),
+      sender_avatar: sender_avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
+      type,
+      title,
+      content: content ? content.trim() : '',
+      target_id: target_id ? target_id.toString() : ''
+    });
+  } catch (e) {
+    console.warn('Lỗi ghi thông báo vào MongoDB:', e.message);
+  }
+}
+
+// =====================================================================
 // 8. API ĐĂNG REVIEW MỚI (Thao tác nguyên tử $push & Aggregation, cho phép chỉ chấm sao không bắt buộc comment)
 // =====================================================================
 app.post('/api/locations/:id/reviews', async (req, res) => {
   try {
-    const { user_name, rating, content, images, avatar } = req.body;
+    const { user_name, rating, content, images, avatar, user_email } = req.body;
     const locationId = req.params.id;
 
     if (!user_name || !rating) {
@@ -496,7 +517,7 @@ app.post('/api/locations/:id/reviews', async (req, res) => {
     const reviewRating = Number(rating);
     const reviewContent = (content && content.trim() !== '') 
       ? content.trim() 
-      : (reviewRating >= 4 ? 'Trải nghiệm rất tuyệt vời! ⭐⭐⭐⭐⭐' : 'Đã chấm ' + reviewRating + ' sao cho địa điểm.');
+      : (reviewRating >= 4 ? 'Trải nghiệm rất tuyệt vời!' : 'Đã chấm ' + reviewRating + ' sao cho địa điểm.');
 
     const newReview = {
       user_name,
@@ -548,6 +569,19 @@ app.post('/api/locations/:id/reviews', async (req, res) => {
       });
     }
 
+    // 3. Tự động tạo Thông báo cho tác giả bài viết nếu người đánh giá khác tác giả
+    if (loc.author_email && (!user_email || loc.author_email.toLowerCase() !== user_email.toLowerCase())) {
+      await createNotification({
+        recipient_email: loc.author_email,
+        sender_name: user_name,
+        sender_avatar: avatar,
+        type: 'review',
+        title: `${user_name} đã đánh giá ${reviewRating} sao cho bài viết "${loc.name}"`,
+        content: reviewContent,
+        target_id: loc._id
+      });
+    }
+
     res.status(201).json({
       message: 'Đăng đánh giá thành công',
       rating_avg: newAvg,
@@ -564,7 +598,7 @@ app.post('/api/locations/:id/reviews', async (req, res) => {
 // =====================================================================
 app.post('/api/locations/:id/reviews/:reviewId/replies', async (req, res) => {
   try {
-    const { user_name, content } = req.body;
+    const { user_name, content, user_avatar, user_email } = req.body;
     const { id, reviewId } = req.params;
 
     if (!user_name || !content) {
@@ -586,6 +620,19 @@ app.post('/api/locations/:id/reviews/:reviewId/replies', async (req, res) => {
     review.replies.push(newReply);
     await loc.save();
 
+    // Thông báo cho tác giả bài viết
+    if (loc.author_email && (!user_email || loc.author_email.toLowerCase() !== user_email.toLowerCase())) {
+      await createNotification({
+        recipient_email: loc.author_email,
+        sender_name: user_name,
+        sender_avatar: user_avatar,
+        type: 'reply',
+        title: `${user_name} đã phản hồi bình luận trong bài viết "${loc.name}"`,
+        content: content,
+        target_id: loc._id
+      });
+    }
+
     res.status(201).json({ message: 'Phản hồi thành công', reply: newReply });
   } catch (err) {
     res.status(500).json({ error: 'Lỗi gửi phản hồi', details: err.message });
@@ -597,7 +644,7 @@ app.post('/api/locations/:id/reviews/:reviewId/replies', async (req, res) => {
 // =====================================================================
 app.post('/api/locations/:id/like', async (req, res) => {
   try {
-    const { user_email } = req.body;
+    const { user_email, user_name, user_avatar } = req.body;
     const locId = req.params.id;
 
     if (!user_email) {
@@ -626,6 +673,19 @@ app.post('/api/locations/:id/like', async (req, res) => {
         },
         { new: true }
       );
+
+      // Tạo thông báo khi có người thả tim bài viết
+      if (loc.author_email && loc.author_email.toLowerCase() !== user_email.toLowerCase()) {
+        await createNotification({
+          recipient_email: loc.author_email,
+          sender_name: user_name || 'Một thành viên',
+          sender_avatar: user_avatar,
+          type: 'like',
+          title: `${user_name || 'Một thành viên'} đã thích bài viết "${loc.name}" của bạn`,
+          content: loc.name,
+          target_id: loc._id
+        });
+      }
     }
 
     updated.likes_count = (updated.liked_by || []).length;
@@ -1072,6 +1132,19 @@ app.post('/api/stories/:id/reply', async (req, res) => {
     story.replies.push(newReply);
     await story.save();
 
+    // Tạo thông báo cho tác giả Story
+    if (story.user_email && story.user_email.toLowerCase() !== (user_email || '').toLowerCase()) {
+      await createNotification({
+        recipient_email: story.user_email,
+        sender_name: user_name || 'Một người dùng',
+        sender_avatar: user_avatar,
+        type: 'story_reply',
+        title: `${user_name || 'Một người dùng'} đã gửi tin nhắn về Story "${story.location_name}"`,
+        content: message.trim(),
+        target_id: story._id
+      });
+    }
+
     res.status(201).json({ message: 'Gửi tin nhắn thành công', reply: newReply, replies_count: story.replies.length });
   } catch (err) {
     res.status(500).json({ error: 'Lỗi gửi tin nhắn cho tác giả story', details: err.message });
@@ -1102,12 +1175,81 @@ app.post('/api/stories/:id/reply-back', async (req, res) => {
     story.markModified('replies');
     await story.save();
 
+    // Tạo thông báo gửi cho người đã đặt câu hỏi trước đó
+    const targetMsg = story.replies[idx];
+    if (targetMsg && targetMsg.user_email) {
+      await createNotification({
+        recipient_email: targetMsg.user_email,
+        sender_name: story.user_name,
+        sender_avatar: story.user_avatar,
+        type: 'story_reply',
+        title: `${story.user_name} đã phản hồi tin nhắn của bạn về Story "${story.location_name}"`,
+        content: reply_text.trim(),
+        target_id: story._id
+      });
+    }
+
     res.json({ 
       message: 'Đã gửi câu trả lời thành công!', 
       reply: story.replies[idx] 
     });
   } catch (err) {
     res.status(500).json({ error: 'Lỗi gửi phản hồi lại', details: err.message });
+  }
+});
+
+// Xóa tin nhắn trong Story (Theo story_id và reply_index)
+app.delete('/api/stories/:id/replies/:replyIndex', async (req, res) => {
+  try {
+    const storyId = req.params.id;
+    const replyIdx = parseInt(req.params.replyIndex);
+    const story = await Story.findById(storyId);
+    if (!story) return res.status(404).json({ error: 'Không tìm thấy Story' });
+
+    if (!story.replies || isNaN(replyIdx) || !story.replies[replyIdx]) {
+      return res.status(404).json({ error: 'Không tìm thấy tin nhắn cần xóa' });
+    }
+
+    story.replies.splice(replyIdx, 1);
+    story.markModified('replies');
+    await story.save();
+
+    res.json({ message: 'Đã xóa tin nhắn thành công!' });
+  } catch (err) {
+    res.status(500).json({ error: 'Lỗi xóa tin nhắn', details: err.message });
+  }
+});
+
+// =====================================================================
+// API THÔNG BÁO THỜI GIAN THỰC (MONGODB NOTIFICATIONS)
+// =====================================================================
+app.get('/api/notifications', async (req, res) => {
+  try {
+    const { email } = req.query;
+    if (!email) return res.json([]);
+
+    const notifs = await Notification.find({ recipient_email: email.toLowerCase().trim() })
+      .sort({ created_at: -1 })
+      .limit(30);
+
+    res.json(notifs);
+  } catch (err) {
+    res.status(500).json({ error: 'Lỗi lấy danh sách thông báo', details: err.message });
+  }
+});
+
+app.put('/api/notifications/read-all', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (email) {
+      await Notification.updateMany(
+        { recipient_email: email.toLowerCase().trim(), is_read: false },
+        { is_read: true }
+      );
+    }
+    res.json({ message: 'Đã đánh dấu tất cả thông báo là đã đọc' });
+  } catch (err) {
+    res.status(500).json({ error: 'Lỗi cập nhật thông báo', details: err.message });
   }
 });
 

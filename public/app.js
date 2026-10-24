@@ -140,6 +140,147 @@ function filterByTag(type, keyword) {
 }
 
 // =====================================================================
+// ĐỒNG BỘ AVATAR VÀ THÔNG BÁO THỜI GIAN THỰC (MONGODB)
+// =====================================================================
+function getConsistentAvatar(name, customAvatar) {
+  if (customAvatar && customAvatar.trim() && !customAvatar.includes('default') && (customAvatar.startsWith('http') || customAvatar.startsWith('/uploads'))) {
+    return customAvatar;
+  }
+  const cleanName = (name || 'FoodTravel').trim();
+  const colors = ['FF5422', '0ea5e9', '10b981', '8b5cf6', 'f59e0b', 'ec4899', '06b6d4', '3b82f6'];
+  let hash = 0;
+  for (let i = 0; i < cleanName.length; i++) {
+    hash = cleanName.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const color = colors[Math.abs(hash) % colors.length];
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(cleanName)}&background=${color}&color=ffffff&size=150&bold=true`;
+}
+
+let userNotifications = [];
+
+async function loadNotifications() {
+  if (!currentUser || !currentUser.email) {
+    const badge = document.getElementById('notifBadgeCount');
+    if (badge) badge.classList.add('hidden');
+    return;
+  }
+  try {
+    const res = await fetch(`/api/notifications?email=${encodeURIComponent(currentUser.email)}`);
+    if (res.ok) {
+      userNotifications = await res.json();
+      updateNotificationsUI();
+    }
+  } catch (e) {
+    console.warn('Lỗi tải thông báo:', e);
+  }
+}
+
+function updateNotificationsUI() {
+  const badge = document.getElementById('notifBadgeCount');
+  const totalBadge = document.getElementById('notifTotalBadge');
+  const container = document.getElementById('notifListContainer');
+
+  const unreadCount = userNotifications.filter(n => !n.is_read).length;
+
+  if (badge) {
+    if (unreadCount > 0) {
+      badge.textContent = unreadCount > 9 ? '9+' : unreadCount;
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+  }
+
+  if (totalBadge) {
+    totalBadge.textContent = `${unreadCount} mới`;
+  }
+
+  if (container) {
+    if (!userNotifications || userNotifications.length === 0) {
+      container.innerHTML = `
+        <div class="py-8 text-center text-slate-400 space-y-1">
+          <i class="fa-regular fa-bell-slash text-2xl text-slate-300"></i>
+          <p class="text-xs font-semibold text-slate-600">Chưa có thông báo nào</p>
+          <p class="text-[10px] text-slate-400">Khi có người thích bài viết, đánh giá hoặc nhắn tin, bạn sẽ thấy ở đây.</p>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = userNotifications.map(n => {
+      const typeIcons = {
+        like: '<i class="fa-solid fa-heart text-rose-500"></i>',
+        review: '<i class="fa-solid fa-star text-amber-500"></i>',
+        reply: '<i class="fa-solid fa-reply text-blue-500"></i>',
+        story_reply: '<i class="fa-solid fa-camera text-[#FF5422]"></i>'
+      };
+      const icon = typeIcons[n.type] || '<i class="fa-solid fa-bell text-[#FF5422]"></i>';
+      const timeStr = formatPostTime(n.created_at || n.createdAt);
+      const isUnread = !n.is_read;
+
+      return `
+        <div onclick="handleNotificationClick('${n.type}', '${n.target_id}')" class="p-3 hover:bg-slate-50 transition-colors cursor-pointer flex items-start space-x-3 ${isUnread ? 'bg-orange-50/40' : ''}">
+          <div class="relative shrink-0 mt-0.5">
+            <img src="${getConsistentAvatar(n.sender_name, n.sender_avatar)}" class="w-8 h-8 rounded-full object-cover border border-slate-100">
+            <span class="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-white flex items-center justify-center text-[10px] shadow-xs">
+              ${icon}
+            </span>
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="text-xs text-slate-800 leading-snug font-medium">
+              ${n.title}
+            </p>
+            ${n.content ? `<p class="text-[11px] text-slate-500 truncate mt-0.5 italic">"${n.content}"</p>` : ''}
+            <span class="text-[10px] text-slate-400 mt-1 block">${timeStr}</span>
+          </div>
+          ${isUnread ? '<span class="w-2 h-2 rounded-full bg-[#FF5422] shrink-0 mt-2"></span>' : ''}
+        </div>
+      `;
+    }).join('');
+  }
+}
+
+function toggleNotificationDropdown() {
+  const dd = document.getElementById('notificationDropdown');
+  if (!dd) return;
+  const isHidden = dd.classList.contains('hidden');
+  if (isHidden) {
+    dd.classList.remove('hidden');
+    loadNotifications();
+  } else {
+    dd.classList.add('hidden');
+  }
+}
+
+async function markAllNotificationsAsRead() {
+  if (!currentUser || !currentUser.email) return;
+  try {
+    await fetch('/api/notifications/read-all', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: currentUser.email })
+    });
+    userNotifications.forEach(n => n.is_read = true);
+    updateNotificationsUI();
+  } catch (e) {
+    console.error('Lỗi đánh dấu đã đọc:', e);
+  }
+}
+
+function handleNotificationClick(type, targetId) {
+  const dd = document.getElementById('notificationDropdown');
+  if (dd) dd.classList.add('hidden');
+
+  if (targetId) {
+    if (type === 'story_reply') {
+      openProfileModal('messages');
+    } else {
+      openLocationModal(targetId);
+    }
+  }
+}
+
+// =====================================================================
 // 2. QUẢN LÝ TÀI KHOẢN NGƯỜI DÙNG & TRANG CÁ NHÂN (MONGODB)
 // =====================================================================
 function updateUserUI() {
@@ -151,6 +292,8 @@ function updateUserUI() {
   const storyPreviewUserAvatar = document.getElementById('storyPreviewUserAvatar');
 
   if (currentUser) {
+    currentUser.avatar = getConsistentAvatar(currentUser.name, currentUser.avatar);
+
     if (composerAvatar) composerAvatar.src = currentUser.avatar;
     if (fbComposerName) fbComposerName.textContent = currentUser.name;
     if (fbComposerAvatar) fbComposerAvatar.src = currentUser.avatar;
@@ -169,15 +312,13 @@ function updateUserUI() {
       `;
     }
 
-    // Cập nhật form viết đánh giá
-    const inputUser = document.getElementById('inputReviewUser');
-    const inputUserDisplay = document.getElementById('inputReviewUserDisplay');
+    // Cập nhật form viết đánh giá chuẩn Ảnh 2
+    const inputContent = document.getElementById('inputReviewContent');
     const avatarUser = document.getElementById('reviewUserAvatar');
-    const authStatus = document.getElementById('reviewAuthStatus');
-    if (inputUser) inputUser.value = currentUser.name;
-    if (inputUserDisplay) inputUserDisplay.textContent = currentUser.name;
+    if (inputContent) inputContent.placeholder = `Bình luận dưới tên ${currentUser.name}...`;
     if (avatarUser) avatarUser.src = currentUser.avatar;
-    if (authStatus) authStatus.innerHTML = `<i class="fa-solid fa-circle-check"></i> <span>Tài khoản: ${currentUser.name}</span>`;
+
+    loadNotifications();
   } else {
     if (fbComposerName) fbComposerName.textContent = 'Thành viên FoodTravel';
     if (storyPreviewUserName) storyPreviewUserName.textContent = 'Thành viên FoodTravel';
@@ -291,7 +432,7 @@ function logoutUser() {
 }
 
 // Modal Trang cá nhân (User Profile)
-async function openProfileModal() {
+async function openProfileModal(initialTab = 'posts') {
   if (!currentUser) {
     openAuthModal('login');
     return;
@@ -438,10 +579,15 @@ async function openProfileModal() {
             <div class="p-3 bg-orange-50/50 rounded-xl border border-orange-100 text-xs space-y-1.5">
               <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-1.5 font-bold text-slate-800">
-                  <img src="${msg.user_avatar}" class="w-5 h-5 rounded-full object-cover">
+                  <img src="${getConsistentAvatar(msg.user_name, msg.user_avatar)}" class="w-5 h-5 rounded-full object-cover">
                   <span>${msg.user_name}</span>
                 </div>
-                <span class="text-[10px] text-slate-500 font-medium">${formatMessageTime(msg.created_at)}</span>
+                <div class="flex items-center space-x-1.5">
+                  <span class="text-[10px] text-slate-500 font-medium">${formatMessageTime(msg.created_at)}</span>
+                  <button onclick="deleteStoryMessage('${msg.story_id}', ${msg.reply_index})" class="text-slate-400 hover:text-rose-500 text-xs p-1 cursor-pointer transition-colors" title="Xóa tin nhắn này">
+                    <i class="fa-regular fa-trash-can"></i>
+                  </button>
+                </div>
               </div>
               <p class="text-[11px] text-slate-700 font-medium bg-white p-2 rounded-lg border border-orange-100/50">"${msg.message}"</p>
               <div class="text-[10px] text-[#FF5422] font-semibold flex items-center space-x-1">
@@ -477,8 +623,27 @@ async function openProfileModal() {
     console.error('Lỗi tải profile data:', e);
   }
 
-  switchProfileTab('posts');
+  switchProfileTab(initialTab);
   modal.classList.remove('hidden');
+}
+
+// Xóa tin nhắn câu hỏi/phản hồi Story (Đồng bộ MongoDB)
+async function deleteStoryMessage(storyId, replyIndex) {
+  if (!confirm('Bạn có chắc chắn muốn xóa tin nhắn này không?')) return;
+  try {
+    const res = await fetch(`/api/stories/${storyId}/replies/${replyIndex}`, {
+      method: 'DELETE'
+    });
+    if (res.ok) {
+      alert('Đã xóa tin nhắn thành công!');
+      openProfileModal('messages');
+    } else {
+      const data = await res.json();
+      alert('Lỗi: ' + (data.error || 'Không thể xóa tin nhắn'));
+    }
+  } catch (err) {
+    console.error('Lỗi xóa tin nhắn:', err);
+  }
 }
 
 // Gửi câu trả lời cho tin nhắn story
@@ -503,8 +668,7 @@ async function sendStoryReplyBack(storyId, replyIndex) {
     const data = await res.json();
     if (res.ok) {
       alert('Đã gửi câu trả lời thành công!');
-      openProfileModal();
-      switchProfileTab('messages');
+      await openProfileModal('messages');
     } else {
       alert('Lỗi: ' + data.error);
     }
@@ -723,16 +887,17 @@ function renderLocationsPage() {
     const likesCount = loc.likes_count || 0;
     const isSaved = isLocationSaved(loc._id);
 
-    // Lấy thông tin tác giả bài viết từ MongoDB (ưu tiên author_name / author_avatar)
-    const authorName = loc.author_name || (loc.reviews && loc.reviews.length > 0 ? loc.reviews[0].user_name : 'Thành viên FoodTravel');
-    const authorAvatar = loc.author_avatar || (loc.reviews && loc.reviews.length > 0 && loc.reviews[0].avatar ? loc.reviews[0].avatar : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100');
-    const timeAgoStr = formatPostTime(loc.createdAt);
-
+    // Lấy thông tin tác giả bài viết từ MongoDB (chỉ gắn cờ nếu đúng là bài của người đăng nhập)
     const isMyPost = currentUser && (
-      (loc.author_email && loc.author_email.toLowerCase() === currentUser.email.toLowerCase()) ||
-      (currentUser.email && currentUser.email.toLowerCase() === 'vanngoc@foodtravel.vn') ||
-      (currentUser.email && currentUser.email.toLowerCase().includes('admin'))
+      (loc.author_email && currentUser.email && loc.author_email.toLowerCase() === currentUser.email.toLowerCase()) ||
+      (loc.author_name && currentUser.name && loc.author_name.toLowerCase() === currentUser.name.toLowerCase())
     );
+
+    const authorName = (loc.author_name && loc.author_name.trim() && loc.author_name !== 'Thành viên FoodTravel') 
+      ? loc.author_name 
+      : (isMyPost ? currentUser.name : (loc.reviews && loc.reviews.length > 0 && loc.reviews[0].user_name ? loc.reviews[0].user_name : 'Người khám phá'));
+    const authorAvatar = getConsistentAvatar(authorName, loc.author_avatar);
+    const timeAgoStr = formatPostTime(loc.createdAt);
 
     return `
       <div class="bg-white rounded-3xl overflow-hidden border border-slate-200/80 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between group">
@@ -780,7 +945,7 @@ function renderLocationsPage() {
 
             <div class="absolute bottom-3 left-3 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-slate-900/75 backdrop-blur-md text-amber-400 flex items-center space-x-1 shadow-sm">
               <i class="fa-solid fa-star text-xs"></i>
-              <span>${loc.rating_avg ? loc.rating_avg.toFixed(1) : '5.0'}</span>
+              <span>${(loc.total_reviews && loc.total_reviews > 0) ? (loc.rating_avg ? loc.rating_avg.toFixed(1) : '0.0') : 'Mới'}</span>
               <span class="text-slate-300 text-[10px] font-normal">(${loc.total_reviews || 0})</span>
             </div>
           </div>
@@ -1574,33 +1739,43 @@ async function openLocationModal(locId) {
     const loc = await res.json();
 
     document.getElementById('modalName').textContent = loc.name;
-    document.getElementById('modalCity').querySelector('span').textContent = loc.address || `${loc.name}, ${loc.city}`;
+    const addressDisplay = loc.address && loc.address.trim() ? loc.address : loc.city;
+    document.getElementById('modalCity').querySelector('span').textContent = addressDisplay;
     document.getElementById('modalCategoryBadge').textContent = loc.category;
-    document.getElementById('modalRatingAvg').textContent = loc.rating_avg ? loc.rating_avg.toFixed(1) : '5.0';
+    document.getElementById('modalRatingAvg').textContent = (loc.total_reviews && loc.total_reviews > 0) ? (loc.rating_avg ? loc.rating_avg.toFixed(1) : '0.0') : 'Chưa có đánh giá';
     document.getElementById('modalTotalReviews').textContent = `${loc.total_reviews || 0} đánh giá`;
     document.getElementById('modalCoords').textContent = `[${loc.location.coordinates[0].toFixed(4)}, ${loc.location.coordinates[1].toFixed(4)}]`;
     document.getElementById('modalDescription').textContent = loc.description || 'Chưa có bài viết mô tả chi tiết.';
     
-    // Cập nhật thông tin Tác giả bài viết & Thời gian đăng
-    const authorName = loc.author_name || (loc.reviews && loc.reviews.length > 0 ? loc.reviews[0].user_name : 'Thành viên FoodTravel');
-    const authorAvatar = loc.author_avatar || (loc.reviews && loc.reviews.length > 0 && loc.reviews[0].avatar ? loc.reviews[0].avatar : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100');
+    // Cập nhật thông tin Tác giả bài viết & Thời gian đăng (Chỉ hiện huy hiệu và nút xóa nếu đúng là chủ bài viết)
+    const isMyPost = currentUser && (
+      (loc.author_email && currentUser.email && loc.author_email.toLowerCase() === currentUser.email.toLowerCase()) ||
+      (loc.author_name && currentUser.name && loc.author_name.toLowerCase() === currentUser.name.toLowerCase())
+    );
+
+    const authorName = (loc.author_name && loc.author_name.trim() && loc.author_name !== 'Thành viên FoodTravel') 
+      ? loc.author_name 
+      : (isMyPost ? currentUser.name : (loc.reviews && loc.reviews.length > 0 && loc.reviews[0].user_name ? loc.reviews[0].user_name : 'Người khám phá'));
+    const authorAvatar = getConsistentAvatar(authorName, loc.author_avatar);
+
     const modalAuthorName = document.getElementById('modalAuthorName');
     const modalAuthorAvatar = document.getElementById('modalAuthorAvatar');
+    const modalAuthorBadge = document.getElementById('modalAuthorBadge');
     const modalCreatedAtText = document.getElementById('modalCreatedAtText');
-    const modalDeleteBtn = document.getElementById('modalDeleteBtn');
+    const modalBannerDeleteBtn = document.getElementById('modalBannerDeleteBtn');
 
     if (modalAuthorName) modalAuthorName.textContent = authorName;
     if (modalAuthorAvatar) modalAuthorAvatar.src = authorAvatar;
     if (modalCreatedAtText) modalCreatedAtText.textContent = formatPostTime(loc.createdAt);
 
-    if (modalDeleteBtn) {
-      const isMyPost = currentUser && (
-        (loc.author_email && loc.author_email.toLowerCase() === currentUser.email.toLowerCase()) ||
-        (currentUser.email && currentUser.email.toLowerCase() === 'vanngoc@foodtravel.vn') ||
-        (currentUser.email && currentUser.email.toLowerCase().includes('admin'))
-      );
-      if (isMyPost) modalDeleteBtn.classList.remove('hidden');
-      else modalDeleteBtn.classList.add('hidden');
+    if (modalAuthorBadge) {
+      if (isMyPost) modalAuthorBadge.classList.remove('hidden');
+      else modalAuthorBadge.classList.add('hidden');
+    }
+
+    if (modalBannerDeleteBtn) {
+      if (isMyPost) modalBannerDeleteBtn.classList.remove('hidden');
+      else modalBannerDeleteBtn.classList.add('hidden');
     }
 
     const imgEl = document.getElementById('modalImg');
@@ -1616,22 +1791,21 @@ async function openLocationModal(locId) {
     const isSaved = isLocationSaved(locId);
     updateModalSaveUI(isSaved);
 
-    // Tự động điền tài khoản người dùng đăng nhập MongoDB gọn gàng, không thừa thãi
-    const inputUser = document.getElementById('inputReviewUser');
-    const inputUserDisplay = document.getElementById('inputReviewUserDisplay');
+    // Chuẩn bị khung bình luận phong cách Facebook
+    const inputContent = document.getElementById('inputReviewContent');
     const avatarUser = document.getElementById('reviewUserAvatar');
-    if (currentUser) {
-      if (inputUser) inputUser.value = currentUser.name;
-      if (inputUserDisplay) inputUserDisplay.textContent = currentUser.name;
-      if (avatarUser) avatarUser.src = currentUser.avatar;
-    } else {
-      if (inputUser) inputUser.value = 'Khách ẩn danh';
-      if (inputUserDisplay) inputUserDisplay.textContent = 'Khách ẩn danh';
+    if (inputContent) {
+      inputContent.value = '';
+      inputContent.placeholder = `Bình luận dưới tên ${currentUser ? currentUser.name : 'bạn'}...`;
+    }
+    if (avatarUser) {
+      avatarUser.src = currentUser ? getConsistentAvatar(currentUser.name, currentUser.avatar) : getConsistentAvatar('Khách');
     }
 
-    // Reset bộ chọn sao Google Play về 5 sao
+    // Reset bộ chọn sao về 5 sao
     resetStarRatingToDefault();
 
+    activeLocationData = loc;
     renderReviewsList(loc.reviews || []);
     modal.classList.remove('hidden');
 
@@ -1908,6 +2082,13 @@ function closeLocationModal() {
   document.getElementById('locationDetailModal').classList.add('hidden');
 }
 
+function handleReviewKeydown(event) {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    submitReview();
+  }
+}
+
 function renderReviewsList(reviews) {
   const container = document.getElementById('modalReviewsList');
   const badge = document.getElementById('reviewsCountBadge');
@@ -1916,23 +2097,36 @@ function renderReviewsList(reviews) {
   if (badge) badge.textContent = `${reviews.length} đánh giá`;
 
   if (reviews.length === 0) {
-    container.innerHTML = '<div class="p-4 text-center text-xs text-slate-400">Chưa có đánh giá nào. Hãy là người đầu tiên chia sẻ cảm nhận!</div>';
+    container.innerHTML = '<div class="p-6 text-center text-xs text-slate-400 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">Chưa có đánh giá nào. Hãy là người đầu tiên chia sẻ cảm nhận!</div>';
     return;
   }
 
   container.innerHTML = reviews.map(rev => {
-    const stars = '⭐'.repeat(rev.rating);
+    const revAvatar = getConsistentAvatar(rev.user_name, rev.avatar);
+    const isAuthor = activeLocationData && (
+      (activeLocationData.author_name && rev.user_name && activeLocationData.author_name.toLowerCase() === rev.user_name.toLowerCase()) ||
+      (activeLocationData.author_email && rev.email && activeLocationData.author_email.toLowerCase() === rev.email.toLowerCase())
+    );
+
     const repliesHtml = (rev.replies && rev.replies.length > 0) ? `
-      <div class="mt-2.5 pl-3 border-l-2 border-[#FF5422] space-y-2">
-        ${rev.replies.map(rep => `
-          <div class="bg-orange-50/60 p-2.5 rounded-xl text-xs text-slate-700">
-            <div class="font-bold text-[#FF5422] text-[11px] flex items-center space-x-1">
-              <i class="fa-solid fa-reply text-[10px]"></i>
-              <span>${rep.user_name}</span>
+      <div class="mt-2.5 pl-3 border-l-2 border-[#FF5422]/60 space-y-2">
+        ${rev.replies.map(rep => {
+          const repAvatar = getConsistentAvatar(rep.user_name, rep.avatar);
+          return `
+            <div class="bg-slate-100/70 p-2.5 rounded-xl text-xs text-slate-700 space-y-1">
+              <div class="flex items-center justify-between">
+                <div class="font-bold text-slate-900 text-[11px] flex items-center space-x-1.5">
+                  <img src="${repAvatar}" class="w-4 h-4 rounded-full object-cover">
+                  <span>${rep.user_name}</span>
+                </div>
+                <button onclick="toggleInlineReply('${rev._id}', '${rep.user_name}')" class="text-[10px] text-slate-400 hover:text-[#FF5422] font-semibold cursor-pointer">
+                  Trả lời
+                </button>
+              </div>
+              <p class="text-slate-600 text-[11px] leading-relaxed">${rep.content}</p>
             </div>
-            <p class="mt-1 text-slate-600">${rep.content}</p>
-          </div>
-        `).join('')}
+          `;
+        }).join('')}
       </div>
     ` : '';
 
@@ -1940,43 +2134,122 @@ function renderReviewsList(reviews) {
       <div class="p-3.5 bg-slate-50/80 rounded-2xl border border-slate-100 space-y-2">
         <div class="flex items-center justify-between">
           <div class="flex items-center space-x-2">
-            <img src="${rev.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'}" class="w-7 h-7 rounded-full object-cover">
+            <img src="${revAvatar}" class="w-8 h-8 rounded-full object-cover border border-slate-200">
             <div>
-              <div class="text-xs font-bold text-slate-800">${rev.user_name}</div>
+              <div class="flex items-center space-x-1.5">
+                <span class="text-xs font-bold text-slate-900">${rev.user_name}</span>
+                ${isAuthor ? '<span class="text-[9px] px-1.5 py-0.2 bg-orange-50 text-[#FF5422] font-bold rounded">Tác giả</span>' : ''}
+              </div>
               <div class="text-[10px] text-slate-400">${new Date(rev.created_at).toLocaleDateString('vi-VN')}</div>
             </div>
           </div>
-          <span class="text-xs text-amber-500 font-bold">${stars}</span>
+          <div class="flex items-center space-x-1 text-amber-500 text-xs font-bold">
+            <span>${rev.rating}/5</span>
+            <i class="fa-solid fa-star text-[10px]"></i>
+          </div>
         </div>
 
-        <p class="text-xs text-slate-600 leading-relaxed">${rev.content}</p>
+        <p class="text-xs text-slate-700 leading-relaxed">${rev.content}</p>
 
         <!-- Phản hồi phân cấp -->
         ${repliesHtml}
 
-        <!-- Nút Trả lời -->
-        <div class="pt-1 flex items-center justify-end">
-          <button onclick="promptReply('${rev._id}')" class="text-[11px] font-bold text-[#FF5422] hover:text-[#E84615] flex items-center space-x-1 cursor-pointer">
-            <i class="fa-solid fa-reply text-[10px]"></i>
-            <span>Phản hồi</span>
-          </button>
+        <!-- Nút Trả lời và Khung nhập phản hồi trực tiếp (Inline Reply) -->
+        <div class="pt-1">
+          <div class="flex items-center justify-end">
+            <button onclick="toggleInlineReply('${rev._id}')" class="text-[11px] font-bold text-[#FF5422] hover:text-[#E84615] flex items-center space-x-1 cursor-pointer">
+              <i class="fa-solid fa-reply text-[10px]"></i>
+              <span>Phản hồi</span>
+            </button>
+          </div>
+
+          <div id="replyBox_${rev._id}" class="hidden mt-2 pt-2 border-t border-slate-200/60">
+            <div class="flex items-center space-x-2">
+              <img src="${currentUser ? getConsistentAvatar(currentUser.name, currentUser.avatar) : getConsistentAvatar('Khách')}" class="w-6 h-6 rounded-full object-cover shrink-0">
+              <input type="text" id="inlineReplyInput_${rev._id}" placeholder="Viết phản hồi cho ${rev.user_name}..." class="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs outline-none focus:border-[#FF5422]" onkeydown="if(event.key==='Enter') submitInlineReply('${rev._id}')">
+              <button onclick="submitInlineReply('${rev._id}')" class="px-3 py-1.5 bg-[#FF5422] hover:bg-[#E84615] text-white rounded-xl text-xs font-bold cursor-pointer transition-colors shrink-0">
+                Gửi
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     `;
   }).join('');
 }
 
-// 12. GỬI ĐÁNH GIÁ MỚI (LƯU TRỰC TIẾP VÀO MONGODB & CHẠY AGGREGATION TỰ ĐỘNG)
+function toggleInlineReply(reviewId, targetUser = '') {
+  const box = document.getElementById(`replyBox_${reviewId}`);
+  if (!box) return;
+  box.classList.toggle('hidden');
+  if (!box.classList.contains('hidden')) {
+    const input = document.getElementById(`inlineReplyInput_${reviewId}`);
+    if (input) {
+      if (targetUser) input.value = `@${targetUser} `;
+      input.focus();
+    }
+  }
+}
+
+async function submitInlineReply(reviewId) {
+  if (!activeLocationId) return;
+  const input = document.getElementById(`inlineReplyInput_${reviewId}`);
+  if (!input) return;
+  const content = input.value.trim();
+  if (!content) {
+    alert('Vui lòng nhập nội dung phản hồi!');
+    return;
+  }
+
+  const replyName = currentUser ? currentUser.name : 'Khách trải nghiệm';
+  const replyAvatar = currentUser ? currentUser.avatar : '';
+  const replyEmail = currentUser ? currentUser.email : '';
+
+  try {
+    const res = await fetch(`/api/locations/${activeLocationId}/reviews/${reviewId}/replies`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        user_name: replyName, 
+        content,
+        user_avatar: replyAvatar,
+        user_email: replyEmail
+      })
+    });
+
+    if (res.ok) {
+      input.value = '';
+      const box = document.getElementById(`replyBox_${reviewId}`);
+      if (box) box.classList.add('hidden');
+      // Tải lại chi tiết địa điểm để cập nhật review mới mượt mà
+      const locRes = await fetch(`/api/locations/${activeLocationId}`);
+      if (locRes.ok) {
+        const freshLoc = await locRes.json();
+        activeLocationData = freshLoc;
+        renderReviewsList(freshLoc.reviews || []);
+      }
+    } else {
+      const data = await res.json();
+      alert('Lỗi: ' + data.error);
+    }
+  } catch (err) {
+    console.error('Lỗi gửi reply:', err);
+  }
+}
+
+// 12. GỬI ĐÁNH GIÁ MỚI
 async function submitReview() {
   if (!activeLocationId) return;
 
-  const userName = currentUser ? currentUser.name : (document.getElementById('inputReviewUser').value.trim() || 'Người dùng');
-  const userAvatar = currentUser ? currentUser.avatar : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100';
+  const userName = currentUser ? currentUser.name : 'Khách trải nghiệm';
+  const userAvatar = currentUser ? currentUser.avatar : '';
+  const userEmail = currentUser ? currentUser.email : '';
   const rating = parseInt(document.getElementById('inputReviewRating').value) || 5;
-  const content = document.getElementById('inputReviewContent').value.trim();
+  const contentEl = document.getElementById('inputReviewContent');
+  const content = contentEl ? contentEl.value.trim() : '';
 
   // Cho phép đánh giá chấm sao trực tiếp mà không bắt buộc phải nhập bình luận văn bản
-  const reviewContent = content || (rating >= 4 ? 'Trải nghiệm rất tuyệt vời! ⭐⭐⭐⭐⭐' : `Đã chấm ${rating} sao cho địa điểm này.`);
+  const reviewContent = content || (rating >= 4 ? 'Trải nghiệm rất tuyệt vời!' : `Đã chấm ${rating} sao cho địa điểm này.`);
 
   try {
     const res = await fetch(`/api/locations/${activeLocationId}/reviews`, {
@@ -1984,7 +2257,8 @@ async function submitReview() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         user_name: userName, 
-        avatar: userAvatar,
+        user_email: userEmail,
+        avatar: getConsistentAvatar(userName, userAvatar),
         rating, 
         content: reviewContent 
       })
@@ -1992,10 +2266,19 @@ async function submitReview() {
 
     const data = await res.json();
     if (res.ok) {
-      alert(`Đã gửi đánh giá thành công! Điểm đánh giá mới tính từ Aggregation Pipeline: ⭐ ${data.rating_avg}`);
-      document.getElementById('inputReviewContent').value = '';
+      if (contentEl) contentEl.value = '';
       resetStarRatingToDefault();
-      openLocationModal(activeLocationId);
+
+      // Cập nhật lại dữ liệu địa điểm thời gian thực
+      const locRes = await fetch(`/api/locations/${activeLocationId}`);
+      if (locRes.ok) {
+        const freshLoc = await locRes.json();
+        activeLocationData = freshLoc;
+        document.getElementById('modalRatingAvg').textContent = (freshLoc.total_reviews && freshLoc.total_reviews > 0) ? (freshLoc.rating_avg ? freshLoc.rating_avg.toFixed(1) : '0.0') : 'Chưa có đánh giá';
+        document.getElementById('modalTotalReviews').textContent = `${freshLoc.total_reviews || 0} đánh giá`;
+        renderReviewsList(freshLoc.reviews || []);
+      }
+
       fetchLocations();
       fetchHeroOverviewStats();
     } else {
@@ -2003,29 +2286,6 @@ async function submitReview() {
     }
   } catch (err) {
     console.error('Lỗi gửi review:', err);
-  }
-}
-
-// 13. PHẢN HỒI ĐÁNH GIÁ (REPLY)
-async function promptReply(reviewId) {
-  const replyName = currentUser ? currentUser.name : (prompt('Nhập tên của bạn:') || 'Thành viên cộng đồng');
-  if (!replyName) return;
-  const replyContent = prompt('Nhập nội dung phản hồi:');
-  if (!replyContent) return;
-
-  try {
-    const res = await fetch(`/api/locations/${activeLocationId}/reviews/${reviewId}/replies`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_name: replyName, content: replyContent })
-    });
-
-    if (res.ok) {
-      alert('Đã gửi phản hồi thành công vào MongoDB!');
-      openLocationModal(activeLocationId);
-    }
-  } catch (err) {
-    console.error('Lỗi gửi reply:', err);
   }
 }
 
@@ -2367,6 +2627,7 @@ async function submitNewLocation() {
   const name = document.getElementById('newLocName').value.trim();
   const city = document.getElementById('newLocCity').value;
   const category = document.getElementById('newLocCategory').value;
+  const address = document.getElementById('newLocAddress') ? document.getElementById('newLocAddress').value.trim() : '';
   const imgUrl = document.getElementById('newLocImgUrl').value.trim() || 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800';
   const lng = parseFloat(document.getElementById('newLocLng').value);
   const lat = parseFloat(document.getElementById('newLocLat').value);
@@ -2377,8 +2638,8 @@ async function submitNewLocation() {
     return;
   }
 
-  const authorName = currentUser ? currentUser.name : 'Thành viên FoodTravel';
-  const authorAvatar = currentUser ? currentUser.avatar : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100';
+  const authorName = currentUser ? currentUser.name : 'Người khám phá';
+  const authorAvatar = currentUser ? currentUser.avatar : '';
   const authorEmail = currentUser ? currentUser.email : '';
 
   try {
@@ -2389,19 +2650,21 @@ async function submitNewLocation() {
         name,
         city,
         category,
+        address: address || city,
         images: [imgUrl],
         lng,
         lat,
         description: desc,
         author_name: authorName,
         author_email: authorEmail,
-        author_avatar: authorAvatar
+        author_avatar: getConsistentAvatar(authorName, authorAvatar)
       })
     });
 
     const data = await res.json();
     if (res.ok) {
       alert('Đã lưu bài viết & địa điểm mới kèm hình ảnh vào MongoDB thành công!');
+      if (document.getElementById('newLocAddress')) document.getElementById('newLocAddress').value = '';
       closeNewLocationModal();
       fetchLocations();
       fetchHeroOverviewStats();
@@ -2636,6 +2899,34 @@ function showCurrentStory() {
     }
   }
 
+  // Tự động tạm dừng Story khi người dùng đang nhập tin nhắn, chỉ chạy tiếp khi người dùng không thao tác
+  const replyInput = document.getElementById('storyReplyInput');
+  if (replyInput) {
+    replyInput.value = '';
+    replyInput.onfocus = () => {
+      isStoryPaused = true;
+      const playPauseBtn = document.getElementById('btnStoryPlayPause');
+      if (playPauseBtn) playPauseBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
+    };
+    replyInput.oninput = () => {
+      isStoryPaused = true;
+      const playPauseBtn = document.getElementById('btnStoryPlayPause');
+      if (playPauseBtn) playPauseBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
+    };
+    replyInput.onblur = () => {
+      if (!replyInput.value.trim()) {
+        isStoryPaused = false;
+        const playPauseBtn = document.getElementById('btnStoryPlayPause');
+        if (playPauseBtn) playPauseBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
+      }
+    };
+    replyInput.onkeydown = (e) => {
+      if (e.key === 'Enter') {
+        sendStoryReply();
+      }
+    };
+  }
+
   // Render các đoạn Progress Bar trên đỉnh
   renderStoryProgressBars();
 
@@ -2797,8 +3088,9 @@ async function sendStoryReply() {
         badge.classList.remove('hidden');
       }
 
-      // Xóa input
+      // Xóa input và khôi phục trạng thái
       if (input) input.value = '';
+      isStoryPaused = false;
 
       // Hiệu ứng tim bay
       spawnStoryHeartAnimation();
@@ -2826,9 +3118,15 @@ function toggleStoryRepliesDrawer() {
   const isHidden = drawer.classList.contains('hidden');
   if (isHidden) {
     drawer.classList.remove('hidden');
+    isStoryPaused = true;
+    const playPauseBtn = document.getElementById('btnStoryPlayPause');
+    if (playPauseBtn) playPauseBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
     renderStoryRepliesList();
   } else {
     drawer.classList.add('hidden');
+    isStoryPaused = false;
+    const playPauseBtn = document.getElementById('btnStoryPlayPause');
+    if (playPauseBtn) playPauseBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
   }
 }
 
@@ -2848,13 +3146,18 @@ function renderStoryRepliesList() {
     return;
   }
 
-  list.innerHTML = st.replies.map(r => `
+  list.innerHTML = st.replies.map((r, idx) => `
     <div class="bg-white/10 backdrop-blur-md rounded-2xl p-2.5 flex items-start space-x-2.5 border border-white/5">
-      <img src="${r.user_avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'}" class="w-7 h-7 rounded-full object-cover border border-[#FF5422] shrink-0 mt-0.5">
+      <img src="${getConsistentAvatar(r.user_name, r.user_avatar)}" class="w-7 h-7 rounded-full object-cover border border-[#FF5422] shrink-0 mt-0.5">
       <div class="flex-1 min-w-0">
         <div class="flex items-center justify-between">
           <span class="font-bold text-white text-[11px] truncate">${r.user_name}</span>
-          <span class="text-[10px] text-white/70 font-medium">${formatMessageTime(r.created_at)}</span>
+          <div class="flex items-center space-x-1">
+            <span class="text-[10px] text-white/70 font-medium">${formatMessageTime(r.created_at)}</span>
+            <button onclick="deleteStoryMessage('${st._id}', ${idx})" class="text-white/40 hover:text-rose-400 p-0.5 cursor-pointer ml-1" title="Xóa tin nhắn">
+              <i class="fa-regular fa-trash-can text-[10px]"></i>
+            </button>
+          </div>
         </div>
         <p class="text-[11px] text-white/90 mt-0.5 break-words font-normal">${r.message}</p>
       </div>
