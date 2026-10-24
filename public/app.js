@@ -96,7 +96,7 @@ async function fetchHeroOverviewStats() {
     const statAvg = document.getElementById('statAvgRating');
     if (statLocs) statLocs.textContent = data.total_locations || 100;
     if (statRevs) statRevs.textContent = (data.total_reviews || 854).toLocaleString('vi-VN');
-    if (statAvg) statAvg.textContent = `${data.avg_rating || 4.7} ⭐`;
+    if (statAvg) statAvg.textContent = `${data.avg_rating || 4.7}`;
 
     // Cập nhật Widget Chủ đề thịnh hành (Trending Tags) đồng bộ từ MongoDB
     if (data.trending_tags) {
@@ -402,7 +402,7 @@ async function openProfileModal() {
             <div class="p-2.5 bg-slate-50 hover:bg-slate-100/80 rounded-2xl border border-slate-200/80 text-xs transition-colors cursor-pointer" onclick="closeProfileModal(); openLocationModal('${r.location_id}')">
               <div class="flex items-center justify-between font-bold text-slate-800">
                 <span class="truncate text-slate-900 font-extrabold hover:text-[#FF5422]">${r.location_name}</span>
-                <span class="text-amber-500 font-extrabold shrink-0">⭐ ${r.rating}</span>
+                <span class="text-amber-500 font-extrabold shrink-0">${r.rating}/5</span>
               </div>
               <p class="text-[11px] text-slate-500 mt-1 line-clamp-2">${r.content}</p>
             </div>
@@ -523,7 +523,7 @@ function renderSavedLocationsList(savedLocs) {
       <div class="py-6 text-center text-slate-400 space-y-2 bg-slate-50 rounded-2xl p-4 border border-dashed border-slate-200">
         <i class="fa-regular fa-bookmark text-2xl text-amber-500/60"></i>
         <p class="text-xs font-bold text-slate-700">Chưa có địa điểm đã lưu</p>
-        <p class="text-[11px] text-slate-400 max-w-xs mx-auto">Nhấn biểu tượng 🔖 Lưu trên các bài viết để lưu lại các địa điểm yêu thích nhé!</p>
+        <p class="text-[11px] text-slate-400 max-w-xs mx-auto">Nhấn nút Lưu trên các bài viết để lưu lại các địa điểm yêu thích nhé!</p>
       </div>
     `;
     return;
@@ -1189,7 +1189,7 @@ function addUserLocationPinToMap(userLat, userLng, isFallback = false) {
           <div style="width: 7px; height: 7px; background: white; border-radius: 50%;"></div>
         </div>
         <div style="position: absolute; top: -22px; white-space: nowrap; background: #1e3a8a; color: white; font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 9999px; box-shadow: 0 2px 6px rgba(0,0,0,0.25); pointer-events: none;">
-          📍 Vị trí của bạn
+          Vị trí của bạn
         </div>
       </div>
     `,
@@ -1201,9 +1201,9 @@ function addUserLocationPinToMap(userLat, userLng, isFallback = false) {
   userLocationMarker = L.marker([userLat, userLng], { icon: userPinIcon, zIndexOffset: 1000 }).addTo(mapInstance);
   userLocationMarker.bindPopup(`
     <div style="font-family: 'Plus Jakarta Sans', sans-serif; padding: 4px; text-align: center;">
-      <div style="font-weight: 800; color: #1e3a8a; font-size: 13px;">📍 Vị trí hiện tại của bạn</div>
+      <div style="font-weight: 800; color: #1e3a8a; font-size: 13px;">Vị trí hiện tại của bạn</div>
       <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Tọa độ: [${userLng.toFixed(4)}, ${userLat.toFixed(4)}]</div>
-      ${isFallback ? '<div style="font-size: 10px; color: #f59e0b; margin-top: 2px;">(Tọa độ mẫu Đà Nẵng)</div>' : '<div style="font-size: 10px; color: #10b981; font-weight: 700; margin-top: 2px;">✓ Đã xác thực GPS chính xác</div>'}
+      ${isFallback ? '<div style="font-size: 10px; color: #f59e0b; margin-top: 2px;">(Tọa độ mẫu Đà Nẵng)</div>' : '<div style="font-size: 10px; color: #10b981; font-weight: 700; margin-top: 2px;">Đã xác thực GPS chính xác</div>'}
     </div>
   `);
 }
@@ -1217,7 +1217,7 @@ function enablePickLocationOnMap() {
   if (mapInstance) {
     mapInstance.getContainer().style.cursor = 'crosshair';
   }
-  alert('🎯 Chế độ ghim bản đồ đã kích hoạt!\n\nHãy nhấn chuột (hoặc chạm tay trên màn hình) vào vị trí trên bản đồ bạn muốn chọn làm tọa độ bài viết.');
+  alert('Chế độ ghim bản đồ đã kích hoạt!\n\nHãy nhấn chuột (hoặc chạm tay trên màn hình) vào vị trí trên bản đồ bạn muốn chọn làm tọa độ bài viết.');
 }
 
 function renderMapMarkers(locations) {
@@ -2058,7 +2058,7 @@ async function handleImageFileSelected(event) {
   const reader = new FileReader();
   reader.onload = function(e) {
     document.getElementById('imgPreviewTag').src = e.target.result;
-    document.getElementById('imgPreviewFileName').textContent = `📄 ${file.name} (${(file.size / 1024).toFixed(0)} KB)`;
+    document.getElementById('imgPreviewFileName').textContent = `${file.name} (${(file.size / 1024).toFixed(0)} KB)`;
     document.getElementById('imgPreviewBox').classList.remove('hidden');
     document.getElementById('uploadPromptBox').classList.add('hidden');
     // Lưu tạm thời Data URL để nếu mạng chậm hay lỗi thì ảnh người dùng chọn vẫn được bảo toàn
@@ -2078,7 +2078,7 @@ async function handleImageFileSelected(event) {
     const data = await res.json();
     if (res.ok && data.url) {
       document.getElementById('newLocImgUrl').value = data.url;
-      console.log('✅ Đã tải file ảnh lên thành công:', data.url);
+      console.log('Đã tải file ảnh lên thành công:', data.url);
     } else {
       console.warn('Upload ảnh qua máy chủ có thông báo:', data.error);
     }
@@ -2202,9 +2202,9 @@ async function requestLocationAccessForNewPost() {
                 Đó là lý do bạn <strong>không thấy popup thông báo hỏi lại</strong>. Cách mở lại:
               </p>
               <div class="text-[11px] text-rose-900 space-y-1 pl-1 bg-white/70 p-2 rounded-lg border border-rose-100">
-                <div>👉 <strong>Bước 1:</strong> Bấm vào biểu tượng <strong>Cài đặt / Ổ khóa 🔒</strong> ở thanh URL (bên trái chữ <code>localhost:5055</code>).</div>
-                <div>👉 <strong>Bước 2:</strong> Gạt dòng <strong>"Vị trí" (Location)</strong> sang <strong>Cho phép (Allow)</strong> hoặc "Hỏi lại (Ask)".</div>
-                <div>👉 <strong>Bước 3:</strong> Nhấn nút <strong>"Lấy lại GPS"</strong> ngay bên dưới.</div>
+                <div><strong>Bước 1:</strong> Bấm vào biểu tượng <strong>Cài đặt / Ổ khóa</strong> ở thanh URL (bên trái chữ <code>localhost:5055</code>).</div>
+                <div><strong>Bước 2:</strong> Gạt dòng <strong>"Vị trí" (Location)</strong> sang <strong>Cho phép (Allow)</strong> hoặc "Hỏi lại (Ask)".</div>
+                <div><strong>Bước 3:</strong> Nhấn nút <strong>"Lấy lại GPS"</strong> ngay bên dưới.</div>
               </div>
             </div>
           `;
@@ -2281,7 +2281,7 @@ async function requestLocationAccessForNewPost() {
                 <span>Trình duyệt đang CHẶN quyền vị trí!</span>
               </div>
               <p class="text-[11px] text-rose-800">
-                Bạn hoặc trình duyệt đã từ chối yêu cầu GPS trước đó. Hãy nhấn vào biểu tượng <strong>Cài đặt / Ổ khóa 🔒</strong> ở đầu thanh địa chỉ URL &rarr; <strong>Bật "Vị trí" thành Cho phép</strong> &rarr; Bấm "Thử lại GPS".
+                Bạn hoặc trình duyệt đã từ chối yêu cầu GPS trước đó. Hãy nhấn vào biểu tượng <strong>Cài đặt / Ổ khóa</strong> ở đầu thanh địa chỉ URL &rarr; <strong>Bật "Vị trí" thành Cho phép</strong> &rarr; Bấm "Thử lại GPS".
               </p>
             </div>
           `;

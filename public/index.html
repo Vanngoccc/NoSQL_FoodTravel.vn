@@ -262,19 +262,19 @@
 
               <!-- Bộ lọc theo thời gian đăng bài -->
               <select id="filterTime" onchange="applyFilters()" class="bg-white border border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-700 outline-none cursor-pointer hover:border-slate-300">
-                <option value="all">🕒 Mọi thời gian</option>
-                <option value="today">⚡ Hôm nay (24h)</option>
-                <option value="week">📅 7 ngày qua</option>
-                <option value="month">🗓️ Tháng này</option>
+                <option value="all">Mọi thời gian</option>
+                <option value="today">Hôm nay (24h)</option>
+                <option value="week">7 ngày qua</option>
+                <option value="month">Tháng này</option>
               </select>
 
               <select id="sortBy" onchange="applyFilters()" class="bg-white border border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-700 outline-none cursor-pointer hover:border-slate-300">
-                <option value="newest">🕒 Bài đăng mới nhất</option>
-                <option value="rating">⭐ Đánh giá cao nhất</option>
-                <option value="reviews">💬 Nhiều đánh giá nhất</option>
-                <option value="likes">❤️ Nhiều lượt thích nhất</option>
-                <option value="oldest">⏳ Cũ nhất</option>
-                <option value="name">🔤 Theo thứ tự A-Z</option>
+                <option value="newest">Bài đăng mới nhất</option>
+                <option value="rating">Đánh giá cao nhất</option>
+                <option value="reviews">Nhiều đánh giá nhất</option>
+                <option value="likes">Nhiều lượt thích nhất</option>
+                <option value="oldest">Cũ nhất</option>
+                <option value="name">Theo thứ tự A-Z</option>
               </select>
             </div>
           </div>
@@ -517,7 +517,7 @@
           </div>
           <div class="p-5 rounded-2xl bg-gradient-to-br from-amber-50 to-yellow-50 border border-amber-100">
             <div class="text-xs font-bold text-amber-800">Điểm đánh giá trung bình</div>
-            <div class="text-3xl font-black text-amber-600 mt-1" id="statAvgRating">4.7 ⭐</div>
+            <div class="text-3xl font-black text-amber-600 mt-1" id="statAvgRating">4.7</div>
             <div class="text-[11px] text-amber-600/80 mt-1">Chất lượng trải nghiệm cao</div>
           </div>
         </div>
@@ -666,7 +666,7 @@
             <div>
               <div class="flex items-center space-x-2">
                 <span id="modalAuthorName" class="text-xs font-bold text-slate-900">Thành viên FoodTravel</span>
-                <span class="text-[9px] px-1.5 py-0.5 bg-rose-50 text-rose-600 font-bold rounded-md">👑 Tác giả</span>
+                <span class="text-[9px] px-1.5 py-0.5 bg-rose-50 text-rose-600 font-bold rounded-md">Tác giả</span>
               </div>
               <span class="text-[10px] text-slate-400 flex items-center space-x-1 mt-0.5">
                 <i class="fa-regular fa-clock text-[9px]"></i>
@@ -834,7 +834,7 @@
               <input type="hidden" id="newLocLat" value="">
             </div>
             <p class="text-[10px] text-slate-400 italic leading-snug">
-              💡 Máy tính (PC) lấy vị trí từ IP mạng nên có thể lệch; điện thoại (Mobile) có GPS sẽ chuẩn xác 100%. Bạn có thể nhấn <b>Chấm bản đồ</b> để chọn vị trí chính xác mong muốn.
+              Máy tính lấy vị trí qua IP mạng nên có thể lệch; điện thoại có GPS sẽ chuẩn xác. Bạn có thể nhấn <b>Chấm bản đồ</b> để chọn vị trí chính xác mong muốn.
             </p>
           </div>
         </div>
@@ -922,15 +922,15 @@
       <div class="grid grid-cols-3 gap-2 py-2 border-y border-slate-100 text-center">
         <div onclick="switchProfileTab('posts')" class="bg-slate-50 hover:bg-rose-50/50 p-2.5 rounded-2xl cursor-pointer transition-colors" title="Xem danh sách bài viết đã đăng">
           <div class="text-lg font-black text-rose-500" id="profilePostCount">0</div>
-          <div class="text-[10px] text-slate-500 font-medium">Bài đã đăng 📝</div>
+          <div class="text-[10px] text-slate-500 font-medium">Bài đã đăng</div>
         </div>
         <div onclick="switchProfileTab('reviews')" class="bg-slate-50 hover:bg-orange-50/50 p-2.5 rounded-2xl cursor-pointer transition-colors" title="Xem danh sách đánh giá đã viết">
           <div class="text-lg font-black text-[#FF5422]" id="profileReviewCount">0</div>
-          <div class="text-[10px] text-slate-500 font-medium">Đánh giá ⭐</div>
+          <div class="text-[10px] text-slate-500 font-medium">Đánh giá</div>
         </div>
         <div onclick="switchProfileTab('saved')" class="bg-slate-50 hover:bg-amber-50/50 p-2.5 rounded-2xl cursor-pointer transition-colors" title="Xem danh sách địa điểm đã lưu">
           <div class="text-lg font-black text-amber-500" id="profileSavedCount">0</div>
-          <div class="text-[10px] text-slate-500 font-medium">Đã lưu 🔖</div>
+          <div class="text-[10px] text-slate-500 font-medium">Đã lưu</div>
         </div>
       </div>
 
