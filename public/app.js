@@ -4,6 +4,20 @@
 // Toàn bộ Tài khoản, Đánh giá, Tim/Like và Thống kê lưu trên MONGODB
 // =====================================================================
 
+// Đảm bảo khi refresh / tải lại trang (F5 / Ctrl+R / Reload) luôn luôn về đầu trang
+if ('scrollRestoration' in history) {
+  history.scrollRestoration = 'manual';
+}
+window.scrollTo(0, 0);
+
+window.addEventListener('beforeunload', () => {
+  window.scrollTo(0, 0);
+});
+
+window.addEventListener('load', () => {
+  window.scrollTo(0, 0);
+});
+
 let allLocations = [];
 let currentCategoryFilter = 'ALL';
 let mapInstance = null;
