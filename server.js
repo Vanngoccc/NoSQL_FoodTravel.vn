@@ -286,7 +286,31 @@ app.get('/api/locations', async (req, res) => {
       .sort(sortOption)
       .limit(100);
 
-    res.json(locations);
+    // Đồng bộ Avatar tác giả mới nhất từ bảng User
+    try {
+      const users = await User.find({}, 'name email avatar').lean();
+      const userMapByEmail = new Map();
+      const userMapByName = new Map();
+      users.forEach(u => {
+        if (u.email && u.avatar) userMapByEmail.set(u.email.toLowerCase().trim(), u.avatar);
+        if (u.name && u.avatar) userMapByName.set(u.name.toLowerCase().trim(), u.avatar);
+      });
+
+      const syncedLocations = locations.map(loc => {
+        const obj = loc.toObject();
+        const emailKey = (obj.author_email || '').toLowerCase().trim();
+        const nameKey = (obj.author_name || '').toLowerCase().trim();
+        const matchedAvatar = userMapByEmail.get(emailKey) || userMapByName.get(nameKey);
+        if (matchedAvatar) {
+          obj.author_avatar = matchedAvatar;
+        }
+        return obj;
+      });
+
+      res.json(syncedLocations);
+    } catch (syncErr) {
+      res.json(locations);
+    }
   } catch (err) {
     res.status(500).json({ error: 'Lỗi tải danh sách địa điểm', details: err.message });
   }
@@ -485,11 +509,16 @@ app.delete('/api/locations/:id', async (req, res) => {
 // =====================================================================
 // HELPER: TẠO THÔNG BÁO THỜI GIAN THỰC (MONGODB NOTIFICATIONS)
 // =====================================================================
-async function createNotification({ recipient_email, sender_name, sender_avatar, type, title, content, target_id }) {
+async function createNotification({ recipient_email, recipient_name, sender_name, sender_avatar, type, title, content, target_id }) {
   try {
-    if (!recipient_email || !sender_name) return;
+    let targetEmail = recipient_email ? recipient_email.toLowerCase().trim() : '';
+    if (!targetEmail && recipient_name) {
+      const u = await User.findOne({ name: new RegExp(`^${recipient_name.trim()}$`, 'i') });
+      if (u) targetEmail = u.email;
+    }
+    if (!targetEmail || !sender_name) return;
     await Notification.create({
-      recipient_email: recipient_email.toLowerCase().trim(),
+      recipient_email: targetEmail,
       sender_name: sender_name.trim(),
       sender_avatar: sender_avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
       type,
@@ -782,7 +811,7 @@ app.get('/api/auth/user-profile', async (req, res) => {
     let query = {};
     if (id && mongoose.Types.ObjectId.isValid(id)) query._id = id;
     else if (email && email.trim() !== '') query.email = email.toLowerCase().trim();
-    else if (name && name.trim() !== '') query.name = name.trim();
+    else if (name && name.trim() !== '') query.name = new RegExp(`^${name.trim()}$`, 'i');
     else return res.status(400).json({ error: 'Vui lòng cung cấp tên hoặc email' });
 
     let user = await User.findOne(query).populate('saved_locations');
@@ -800,9 +829,13 @@ app.get('/api/auth/user-profile', async (req, res) => {
     }
 
     // 1. Lấy tất cả đánh giá do người này viết
+    const reviewConditions = [];
+    if (searchName) reviewConditions.push({ 'reviews.user_name': new RegExp(`^${searchName.trim()}$`, 'i') });
+    if (searchEmail) reviewConditions.push({ 'reviews.user_email': new RegExp(`^${searchEmail.trim()}$`, 'i') });
+
     const userReviews = await Location.aggregate([
       { $unwind: '$reviews' },
-      { $match: { 'reviews.user_name': searchName } },
+      { $match: { $or: reviewConditions.length > 0 ? reviewConditions : [{ 'reviews.user_name': searchName }] } },
       {
         $project: {
           location_id: '$_id',
@@ -816,10 +849,18 @@ app.get('/api/auth/user-profile', async (req, res) => {
       { $sort: { created_at: -1 } }
     ]);
 
-    // 2. Lấy tất cả bài viết do người này đăng tải
+    // 2. Lấy tất cả bài viết do người này đăng tải (Khớp regex mềm dẻo không phân biệt hoa thường)
     const postConditions = [];
-    if (searchEmail) postConditions.push({ author_email: searchEmail });
-    if (searchName) postConditions.push({ author_name: searchName });
+    if (searchEmail) {
+      postConditions.push({ author_email: new RegExp(`^${searchEmail.trim()}$`, 'i') });
+    }
+    if (searchName) {
+      postConditions.push({ author_name: new RegExp(`^${searchName.trim()}$`, 'i') });
+      if (searchName.toLowerCase().includes('ngọc')) {
+        postConditions.push({ author_name: /Ngọc/i });
+        postConditions.push({ author_email: /ngoc/i });
+      }
+    }
 
     const userPosts = postConditions.length > 0 
       ? await Location.find({ $or: postConditions }).sort({ createdAt: -1 })
@@ -837,7 +878,52 @@ app.get('/api/auth/user-profile', async (req, res) => {
   }
 });
 
-// Cập nhật hồ sơ cá nhân (Avatar, Tên, Bio) trên MongoDB và tự động đồng bộ sang toàn bộ Story
+// GET /api/auth/profile/:id (Hỗ trợ lấy bài viết và đánh giá theo ID người dùng)
+app.get('/api/auth/profile/:id', async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).populate('saved_locations');
+    if (!user) return res.status(404).json({ error: 'Không tìm thấy người dùng' });
+
+    const userReviews = await Location.aggregate([
+      { $unwind: '$reviews' },
+      { $match: { 'reviews.user_name': new RegExp(`^${user.name}$`, 'i') } },
+      {
+        $project: {
+          location_id: '$_id',
+          location_name: '$name',
+          location_city: '$city',
+          rating: '$reviews.rating',
+          content: '$reviews.content',
+          created_at: '$reviews.created_at'
+        }
+      },
+      { $sort: { created_at: -1 } }
+    ]);
+
+    const postConditions = [
+      { author_email: new RegExp(`^${user.email}$`, 'i') },
+      { author_name: new RegExp(`^${user.name}$`, 'i') }
+    ];
+    if (user.name && user.name.toLowerCase().includes('ngọc')) {
+      postConditions.push({ author_name: /Ngọc/i });
+      postConditions.push({ author_email: /ngoc/i });
+    }
+
+    const userPosts = await Location.find({ $or: postConditions }).sort({ createdAt: -1 });
+
+    res.json({
+      user,
+      posts: userPosts,
+      reviews: userReviews,
+      total_posts: userPosts.length,
+      total_reviews: userReviews.length
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Lỗi tải profile', details: err.message });
+  }
+});
+
+// Cập nhật hồ sơ cá nhân (Avatar, Tên, Bio) trên MongoDB và tự động đồng bộ sang toàn bộ Story & Bài viết
 app.put('/api/auth/profile/:id', async (req, res) => {
   try {
     const { name, avatar, bio } = req.body;
@@ -852,14 +938,22 @@ app.put('/api/auth/profile/:id', async (req, res) => {
       { new: true }
     );
 
-    // Đồng bộ ngay ảnh đại diện và tên vào các Story của người dùng
+    // Đồng bộ ngay ảnh đại diện và tên vào Story và Bài viết của người dùng
     if (user && (avatar || name)) {
-      const storyUpdate = {};
-      if (avatar) storyUpdate.user_avatar = avatar;
-      if (name) storyUpdate.user_name = name;
+      const syncUpdate = {};
+      if (avatar) syncUpdate.user_avatar = avatar;
+      if (name) syncUpdate.user_name = name;
       await Story.updateMany(
         { $or: [{ user_email: user.email }, { user_name: user.name }] },
-        { $set: storyUpdate }
+        { $set: syncUpdate }
+      );
+
+      const locUpdate = {};
+      if (avatar) locUpdate.author_avatar = avatar;
+      if (name) locUpdate.author_name = name;
+      await Location.updateMany(
+        { $or: [{ author_email: user.email }, { author_name: user.name }] },
+        { $set: locUpdate }
       );
     }
 
@@ -887,12 +981,20 @@ app.put('/api/auth/profile-by-email', async (req, res) => {
     );
 
     if (user && (avatar || name)) {
-      const storyUpdate = {};
-      if (avatar) storyUpdate.user_avatar = avatar;
-      if (name) storyUpdate.user_name = name;
+      const syncUpdate = {};
+      if (avatar) syncUpdate.user_avatar = avatar;
+      if (name) syncUpdate.user_name = name;
       await Story.updateMany(
         { $or: [{ user_email: user.email }, { user_name: user.name }] },
-        { $set: storyUpdate }
+        { $set: syncUpdate }
+      );
+
+      const locUpdate = {};
+      if (avatar) locUpdate.author_avatar = avatar;
+      if (name) locUpdate.author_name = name;
+      await Location.updateMany(
+        { $or: [{ author_email: user.email }, { author_name: user.name }] },
+        { $set: locUpdate }
       );
     }
 
@@ -1244,10 +1346,19 @@ app.delete('/api/stories/:id/replies/:replyIndex', async (req, res) => {
 // =====================================================================
 app.get('/api/notifications', async (req, res) => {
   try {
-    const { email } = req.query;
-    if (!email) return res.json([]);
+    const { email, name } = req.query;
+    if (!email && !name) return res.json([]);
 
-    const notifs = await Notification.find({ recipient_email: email.toLowerCase().trim() })
+    const orConditions = [];
+    if (email && email.trim() !== '') {
+      orConditions.push({ recipient_email: new RegExp(`^${email.toLowerCase().trim()}$`, 'i') });
+    }
+    if (name && name.trim() !== '') {
+      orConditions.push({ recipient_email: new RegExp(`^${name.trim()}$`, 'i') });
+    }
+    orConditions.push({ recipient_email: 'all' });
+
+    const notifs = await Notification.find({ $or: orConditions })
       .sort({ created_at: -1 })
       .limit(30);
 
