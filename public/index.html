@@ -643,7 +643,7 @@
     <div id="locationModalContainer" class="bg-white rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-y-auto no-scrollbar shadow-2xl border border-slate-200 relative">
       
       <!-- Nút đóng Modal -->
-      <button onclick="closeLocationModal()" class="absolute top-4 right-4 z-20 w-9 h-9 rounded-full bg-black/60 hover:bg-black text-white flex items-center justify-center transition-colors cursor-pointer shadow-md">
+      <button onclick="closeLocationModal()" class="absolute top-4 right-4 z-20 w-9 h-9 rounded-full bg-black/60 hover:bg-black text-white flex items-center justify-center transition-colors cursor-pointer shadow-md" title="Đóng">
         <i class="fa-solid fa-xmark text-sm"></i>
       </button>
 
@@ -797,7 +797,7 @@
       <div class="flex items-center justify-between border-b border-slate-100 pb-3 relative">
         <div class="w-8"></div>
         <h3 class="text-base font-extrabold text-slate-900">Tạo bài viết</h3>
-        <button onclick="closeNewLocationModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center cursor-pointer transition-colors">
+        <button onclick="closeNewLocationModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center cursor-pointer transition-colors" title="Đóng">
           <i class="fa-solid fa-xmark text-sm"></i>
         </button>
       </div>
@@ -944,40 +944,30 @@
   </div>
 
   <!-- ==================== MODAL TRANG CÁ NHÂN (PROFILE MONGODB) ==================== -->
-  <div id="userProfileModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto no-scrollbar relative flex flex-col">
-      <!-- Ảnh bìa Profile tuyệt đẹp chuẩn phong cách Mạng Xã Hội -->
-      <div class="relative w-full h-32 sm:h-36 rounded-t-3xl overflow-hidden bg-gradient-to-r from-orange-500 via-rose-500 to-amber-500 shrink-0">
-        <img id="profileModalCoverImg" src="https://images.unsplash.com/photo-1528127269322-539801943592?w=800&auto=format&fit=crop&q=80" alt="Cover" class="w-full h-full object-cover opacity-85">
-        <div class="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/30"></div>
-
-        <!-- Huy hiệu tiêu đề góc trái -->
-        <div class="absolute top-3 left-3 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full text-white text-xs font-bold flex items-center space-x-1.5 shadow-sm">
-          <i class="fa-solid fa-id-badge text-[#FF5422]"></i>
-          <span>Trang cá nhân thành viên</span>
-        </div>
-
-        <!-- Nút đóng góc phải nổi trên ảnh bìa -->
-        <button onclick="closeProfileModal()" class="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 text-white backdrop-blur-md flex items-center justify-center cursor-pointer transition-all shadow-md" title="Đóng cửa sổ">
+  <div id="userProfileModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto no-scrollbar relative space-y-4">
+      
+      <!-- Header chuẩn đơn giản: Tiêu đề + nút đóng góc phải (không bị khoảng trống) -->
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="text-base font-extrabold text-slate-900">Trang cá nhân thành viên</h3>
+        <button onclick="closeProfileModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center cursor-pointer transition-colors" title="Đóng">
           <i class="fa-solid fa-xmark text-sm"></i>
         </button>
       </div>
 
-      <!-- Nội dung Profile chính -->
-      <div class="p-6 pt-0 space-y-4">
-        <!-- Avatar nổi lồng ghép lên ảnh bìa -->
-        <div class="-mt-12 sm:-mt-14 flex flex-col items-center text-center space-y-2 relative z-10">
-          <div class="relative group">
-            <img id="profileModalAvatar" src="" class="w-24 h-24 rounded-full object-cover border-4 border-white shadow-xl ring-2 ring-[#FF5422]/20 bg-white">
-            <input type="file" id="avatarFileInput" accept="image/png, image/jpeg, image/jpg, image/webp" class="hidden" onchange="handleAvatarFileSelected(event)">
-            <button id="profileAvatarEditBtn" onclick="document.getElementById('avatarFileInput').click()" class="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-[#FF5422] text-white text-xs flex items-center justify-center shadow-md hover:bg-[#E84615] cursor-pointer border-2 border-white transition-transform hover:scale-105" title="Tải ảnh đại diện mới từ máy tính">
-              <i class="fa-solid fa-camera"></i>
-            </button>
-          </div>
-          <h4 id="profileModalName" class="text-base font-black text-slate-900 mt-1"></h4>
-          <p id="profileModalEmail" class="text-xs text-slate-400 font-mono"></p>
-          <p id="profileModalBio" class="text-xs text-slate-600 italic px-4"></p>
+      <!-- Avatar & Thông tin (Gọn gàng ngay dưới tiêu đề) -->
+      <div class="flex flex-col items-center text-center space-y-1.5 pt-1">
+        <div class="relative group">
+          <img id="profileModalAvatar" src="" class="w-20 h-20 rounded-full object-cover border-2 border-[#FF5422] shadow-md">
+          <input type="file" id="avatarFileInput" accept="image/png, image/jpeg, image/jpg, image/webp" class="hidden" onchange="handleAvatarFileSelected(event)">
+          <button id="profileAvatarEditBtn" onclick="document.getElementById('avatarFileInput').click()" class="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-[#FF5422] text-white text-xs flex items-center justify-center shadow-md hover:bg-[#E84615] cursor-pointer" title="Tải ảnh PNG/JPG từ máy tính">
+            <i class="fa-solid fa-camera"></i>
+          </button>
         </div>
+        <h4 id="profileModalName" class="text-base font-black text-slate-900"></h4>
+        <p id="profileModalEmail" class="text-xs text-slate-400 font-mono"></p>
+        <p id="profileModalBio" class="text-xs text-slate-600 italic px-4"></p>
+      </div>
 
       <!-- Thống kê cá nhân (3 Cột: Bài viết đã đăng, Đánh giá đã viết, Địa điểm đã lưu) -->
       <div class="grid grid-cols-3 gap-2 py-2 border-y border-slate-100 text-center">
@@ -1040,12 +1030,12 @@
   </div>
 
   <!-- ==================== MODAL ĐĂNG NHẬP / ĐĂNG KÝ (LƯU TRỮ TRÊN MONGODB) ==================== -->
-  <div id="authModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 space-y-4 relative">
-      <div class="sticky top-0 bg-white z-10 flex items-center justify-between border-b border-slate-100 pb-3">
+  <div id="authModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-3xl max-w-sm w-full p-5 sm:p-6 shadow-2xl border border-slate-200 space-y-4 relative">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
         <h3 id="authModalTitle" class="text-base font-black text-slate-900">Đăng nhập tài khoản</h3>
-        <button onclick="closeAuthModal()" class="w-8 h-8 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center cursor-pointer transition-colors" title="Đóng">
-          <i class="fa-solid fa-xmark"></i>
+        <button onclick="closeAuthModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center cursor-pointer transition-colors" title="Đóng">
+          <i class="fa-solid fa-xmark text-sm"></i>
         </button>
       </div>
 
@@ -1142,7 +1132,7 @@
             <button onclick="toggleStoryPlayPause()" id="btnStoryPlayPause" class="w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center text-xs transition-colors cursor-pointer">
               <i class="fa-solid fa-pause"></i>
             </button>
-            <button onclick="closeStoryViewer()" class="w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center text-xs transition-colors cursor-pointer">
+            <button onclick="closeStoryViewer()" class="w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center text-xs transition-colors cursor-pointer" title="Đóng">
               <i class="fa-solid fa-xmark text-sm"></i>
             </button>
           </div>
@@ -1203,7 +1193,8 @@
   <div id="createStoryModal" class="hidden fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
     <div class="bg-white rounded-3xl max-w-2xl w-full p-5 sm:p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[92vh] overflow-y-auto no-scrollbar relative">
       
-      <div class="sticky top-0 bg-white/95 backdrop-blur-md z-20 flex items-center justify-between border-b border-slate-100 pb-3 -mx-5 px-5 sm:-mx-6 sm:px-6 -mt-5 pt-5 sm:-mt-6 sm:pt-6">
+      <!-- Header Modal: Tiêu đề + nút đóng chuẩn mực gọn gàng, KHÔNG bị khoảng trống phía trên -->
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
         <div class="flex items-center space-x-2.5">
           <div class="w-8 h-8 rounded-xl bg-orange-50 text-[#FF5422] flex items-center justify-center text-xs font-bold">
             <i class="fa-solid fa-camera"></i>
@@ -1213,8 +1204,8 @@
             <p class="text-[11px] text-slate-400">Khoảnh khắc được lưu trữ và hiển thị trong 24 giờ</p>
           </div>
         </div>
-        <button onclick="closeCreateStoryModal()" class="w-8 h-8 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center cursor-pointer transition-colors" title="Đóng">
-          <i class="fa-solid fa-xmark"></i>
+        <button onclick="closeCreateStoryModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center cursor-pointer transition-colors" title="Đóng">
+          <i class="fa-solid fa-xmark text-sm"></i>
         </button>
       </div>
 
