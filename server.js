@@ -34,32 +34,37 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-  const allowed = ['.png', '.jpg', '.jpeg', '.webp'];
+  const allowed = ['.png', '.jpg', '.jpeg', '.jpe', '.jfif', '.webp', '.bmp', '.gif', '.svg'];
   const ext = path.extname(file.originalname).toLowerCase();
-  if (allowed.includes(ext)) {
+  const isImageMime = file.mimetype && file.mimetype.startsWith('image/');
+  if (allowed.includes(ext) || isImageMime) {
     cb(null, true);
   } else {
-    cb(new Error('Hệ thống chỉ chấp nhận file ảnh định dạng PNG, JPG, JPEG hoặc WEBP!'), false);
+    cb(new Error('Hệ thống chỉ chấp nhận file ảnh (PNG, JPG, JPEG, JPE, WEBP, GIF, BMP)!'), false);
   }
 };
 
 const upload = multer({
   storage: storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // Tối đa 10MB
+  limits: { fileSize: 15 * 1024 * 1024 }, // Tối đa 15MB
   fileFilter: fileFilter
 });
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '20mb' }));
+app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(uploadDir));
 
-// API Tải file ảnh thực tế (PNG / JPG / WEBP)
-app.post('/api/upload', upload.single('image'), (req, res) => {
-  try {
+// API Tải file ảnh thực tế đơn lẻ
+app.post('/api/upload', (req, res) => {
+  upload.single('image')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ error: err.message || 'Lỗi tải file ảnh lên' });
+    }
     if (!req.file) {
-      return res.status(400).json({ error: 'Vui lòng chọn file ảnh hợp lệ (PNG, JPG, WEBP)' });
+      return res.status(400).json({ error: 'Vui lòng chọn file ảnh hợp lệ' });
     }
     const fileUrl = `/uploads/${req.file.filename}`;
     res.json({
@@ -67,9 +72,25 @@ app.post('/api/upload', upload.single('image'), (req, res) => {
       url: fileUrl,
       filename: req.file.filename
     });
-  } catch (err) {
-    res.status(500).json({ error: 'Lỗi tải ảnh lên', details: err.message });
-  }
+  });
+});
+
+// API Tải nhiều file ảnh cùng lúc (hỗ trợ đăng nhiều Story hoặc nhiều ảnh địa điểm)
+app.post('/api/upload-multiple', (req, res) => {
+  upload.array('images', 10)(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ error: err.message || 'Lỗi tải ảnh lên' });
+    }
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'Vui lòng chọn ít nhất một file ảnh' });
+    }
+    const urls = req.files.map(f => `/uploads/${f.filename}`);
+    res.json({
+      message: `Tải thành công ${req.files.length} ảnh`,
+      urls: urls,
+      files: req.files.map(f => ({ url: `/uploads/${f.filename}`, filename: f.filename }))
+    });
+  });
 });
 
 // Kết nối MongoDB
@@ -206,11 +227,11 @@ app.get('/api/stats/overview', async (req, res) => {
 });
 
 // =====================================================================
-// 3. API DANH SÁCH & TÌM KIẾM ĐỊA ĐIỂM (Hỗ trợ Text Search & Filter)
+// 3. API DANH SÁCH & TÌM KIẾM ĐỊA ĐIỂM (Hỗ trợ Text Search & Filter & Lọc thời gian)
 // =====================================================================
 app.get('/api/locations', async (req, res) => {
   try {
-    const { city, category, search, min_rating, sort } = req.query;
+    const { city, category, search, min_rating, sort, time, author_email } = req.query;
     let query = {};
 
     // Lọc theo Thành phố
@@ -228,6 +249,26 @@ app.get('/api/locations', async (req, res) => {
       query.rating_avg = { $gte: parseFloat(min_rating) };
     }
 
+    // Lọc theo Tác giả đăng bài
+    if (author_email && author_email.trim() !== '') {
+      query.author_email = author_email.toLowerCase().trim();
+    }
+
+    // Lọc bài theo thời gian (Hôm nay, Tuần này, Tháng này)
+    if (time) {
+      const now = new Date();
+      if (time === 'today') {
+        const todayCutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        query.createdAt = { $gte: todayCutoff };
+      } else if (time === 'week') {
+        const weekCutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        query.createdAt = { $gte: weekCutoff };
+      } else if (time === 'month') {
+        const monthCutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        query.createdAt = { $gte: monthCutoff };
+      }
+    }
+
     // Tìm kiếm toàn văn (Text Search Index)
     if (search && search.trim() !== '') {
       query.$text = { $search: search.trim() };
@@ -238,6 +279,7 @@ app.get('/api/locations', async (req, res) => {
     if (sort === 'likes') sortOption = { likes_count: -1 };
     if (sort === 'name') sortOption = { name: 1 };
     if (sort === 'newest') sortOption = { createdAt: -1 };
+    if (sort === 'oldest') sortOption = { createdAt: 1 };
 
     const locations = await Location.find(query)
       .sort(sortOption)
@@ -364,11 +406,14 @@ app.get('/api/locations/:id', async (req, res) => {
 });
 
 // =====================================================================
-// 7. API THÊM ĐỊA ĐIỂM MỚI (Hỗ trợ kèm hình ảnh đa phương tiện)
+// 7. API THÊM ĐỊA ĐIỂM MỚI (Hỗ trợ kèm hình ảnh đa phương tiện & thông tin tác giả)
 // =====================================================================
 app.post('/api/locations', async (req, res) => {
   try {
-    const { name, category, city, address, description, price_range, lat, lng, images } = req.body;
+    const { 
+      name, category, city, address, description, price_range, lat, lng, images,
+      author_name, author_email, author_avatar 
+    } = req.body;
 
     if (!name || !city || !lat || !lng) {
       return res.status(400).json({ error: 'Vui lòng cung cấp đầy đủ: Tên, Thành phố, Tọa độ Lat/Lng' });
@@ -387,6 +432,9 @@ app.post('/api/locations', async (req, res) => {
       description: description || `Địa điểm du lịch và ẩm thực hấp dẫn tại ${city}`,
       price_range: price_range || 'MODERATE',
       images: locationImages,
+      author_name: author_name || 'Thành viên FoodTravel',
+      author_email: author_email ? author_email.toLowerCase().trim() : '',
+      author_avatar: author_avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
       location: {
         type: 'Point',
         coordinates: [parseFloat(lng), parseFloat(lat)]
@@ -394,7 +442,7 @@ app.post('/api/locations', async (req, res) => {
       rating_avg: 5.0,
       total_reviews: 0,
       likes_count: 1,
-      liked_by: [],
+      liked_by: author_email ? [author_email.toLowerCase().trim()] : [],
       reviews: []
     });
 
@@ -406,22 +454,55 @@ app.post('/api/locations', async (req, res) => {
 });
 
 // =====================================================================
-// 8. API ĐĂNG REVIEW MỚI (Thao tác nguyên tử $push & Aggregation)
+// 7.1 API XÓA ĐỊA ĐIỂM / BÀI VIẾT (Chỉ tác giả hoặc Quản trị viên)
+// =====================================================================
+app.delete('/api/locations/:id', async (req, res) => {
+  try {
+    const locationId = req.params.id;
+    const { user_email } = req.body;
+
+    const loc = await Location.findById(locationId);
+    if (!loc) {
+      return res.status(404).json({ error: 'Không tìm thấy địa điểm / bài viết' });
+    }
+
+    // Kiểm tra quyền: nếu bài có author_email thì phải khớp user_email hoặc admin
+    const isAdmin = user_email && (user_email.toLowerCase().includes('admin') || user_email.toLowerCase() === 'vanngoc@foodtravel.vn');
+    if (loc.author_email && loc.author_email.trim() !== '') {
+      if (!user_email || (loc.author_email.toLowerCase() !== user_email.toLowerCase() && !isAdmin)) {
+        return res.status(403).json({ error: 'Bạn chỉ có quyền xóa bài viết do chính mình đăng tải!' });
+      }
+    }
+
+    await Location.findByIdAndDelete(locationId);
+    res.json({ message: 'Đã xóa bài viết thành công!', id: locationId });
+  } catch (err) {
+    res.status(500).json({ error: 'Lỗi xóa địa điểm', details: err.message });
+  }
+});
+
+// =====================================================================
+// 8. API ĐĂNG REVIEW MỚI (Thao tác nguyên tử $push & Aggregation, cho phép chỉ chấm sao không bắt buộc comment)
 // =====================================================================
 app.post('/api/locations/:id/reviews', async (req, res) => {
   try {
     const { user_name, rating, content, images, avatar } = req.body;
     const locationId = req.params.id;
 
-    if (!user_name || !rating || !content) {
-      return res.status(400).json({ error: 'Vui lòng nhập họ tên, số sao đánh giá và nội dung review' });
+    if (!user_name || !rating) {
+      return res.status(400).json({ error: 'Vui lòng cung cấp họ tên và số sao đánh giá' });
     }
+
+    const reviewRating = Number(rating);
+    const reviewContent = (content && content.trim() !== '') 
+      ? content.trim() 
+      : (reviewRating >= 4 ? 'Trải nghiệm rất tuyệt vời! ⭐⭐⭐⭐⭐' : 'Đã chấm ' + reviewRating + ' sao cho địa điểm.');
 
     const newReview = {
       user_name,
       avatar: avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
-      rating: Number(rating),
-      content,
+      rating: reviewRating,
+      content: reviewContent,
       images: images || [],
       created_at: new Date(),
       replies: []
@@ -560,7 +641,7 @@ app.post('/api/locations/:id/like', async (req, res) => {
 });
 
 // =====================================================================
-// 11. API XÁC THỰC NGƯỜI DÙNG & TÀI KHOẢN MONGODB
+// 11. API XÁC THỰC NGƯỜI DÙNG & TÀI KHOẢN MONGODB (Hỗ trợ mật khẩu thực tế)
 // =====================================================================
 
 // Đăng ký tài khoản mới (Lưu trực tiếp vào collection users)
@@ -568,25 +649,31 @@ app.post('/api/auth/register', async (req, res) => {
   try {
     const { name, email, password, avatar, bio } = req.body;
     if (!name || !email) {
-      return res.status(400).json({ error: 'Vui lòng nhập họ tên và email' });
+      return res.status(400).json({ error: 'Vui lòng nhập đầy đủ họ tên và email!' });
     }
 
-    const existing = await User.findOne({ email: email.toLowerCase().trim() });
+    if (!password || password.trim().length < 4) {
+      return res.status(400).json({ error: 'Vui lòng nhập mật khẩu tối thiểu 4 ký tự!' });
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+    const existing = await User.findOne({ email: cleanEmail });
     if (existing) {
-      return res.status(400).json({ error: 'Email này đã được sử dụng. Vui lòng đăng nhập.' });
+      return res.status(400).json({ error: 'Email này đã được sử dụng. Vui lòng chuyển sang Đăng nhập.' });
     }
 
     const defaultAvatars = [
       'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
       'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
-      'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150'
+      'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150',
+      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'
     ];
     const assignedAvatar = avatar || defaultAvatars[Math.floor(Math.random() * defaultAvatars.length)];
 
     const user = new User({
       name: name.trim(),
-      email: email.toLowerCase().trim(),
-      password: password || '123456',
+      email: cleanEmail,
+      password: password.trim(),
       avatar: assignedAvatar,
       bio: bio || 'Thành viên cộng đồng ẩm thực & du lịch FoodTravel.vn'
     });
@@ -598,25 +685,28 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-// Đăng nhập tài khoản (Kiểm tra trong MongoDB)
+// Đăng nhập tài khoản (Kiểm tra Email và Mật khẩu trong MongoDB)
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email, password } = req.body;
     if (!email) {
       return res.status(400).json({ error: 'Vui lòng nhập email đăng nhập' });
     }
 
-    let user = await User.findOne({ email: email.toLowerCase().trim() });
+    const cleanEmail = email.toLowerCase().trim();
+    let user = await User.findOne({ email: cleanEmail });
+
     if (!user) {
-      // Nếu chưa có, tự động tạo mới tài khoản thành viên trong MongoDB
-      const defaultName = email.split('@')[0];
-      user = new User({
-        name: defaultName.charAt(0).toUpperCase() + defaultName.slice(1),
-        email: email.toLowerCase().trim(),
-        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
-        bio: 'Thành viên mới của FoodTravel.vn'
-      });
-      await user.save();
+      return res.status(404).json({ error: 'Tài khoản chưa tồn tại. Vui lòng chuyển sang tab Đăng ký.' });
+    }
+
+    // Nếu người dùng có đặt mật khẩu, kiểm tra mật khẩu
+    if (user.password && password) {
+      if (user.password !== password.trim()) {
+        return res.status(401).json({ error: 'Mật khẩu không chính xác! Vui lòng kiểm tra lại.' });
+      }
+    } else if (user.password && !password) {
+      return res.status(400).json({ error: 'Vui lòng nhập mật khẩu tài khoản!' });
     }
 
     res.json({ message: 'Đăng nhập thành công', user });
@@ -625,13 +715,13 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// Lấy hồ sơ cá nhân và danh sách bài đánh giá đã viết
+// Lấy hồ sơ cá nhân, danh sách bài đánh giá và danh sách bài viết đã đăng
 app.get('/api/auth/profile/:id', async (req, res) => {
   try {
     const user = await User.findById(req.params.id).populate('saved_locations');
     if (!user) return res.status(404).json({ error: 'Không tìm thấy người dùng' });
 
-    // Lấy tất cả đánh giá do người dùng viết bằng Aggregation
+    // 1. Lấy tất cả đánh giá do người dùng viết bằng Aggregation
     const userReviews = await Location.aggregate([
       { $unwind: '$reviews' },
       { $match: { 'reviews.user_name': user.name } },
@@ -648,7 +738,21 @@ app.get('/api/auth/profile/:id', async (req, res) => {
       { $sort: { created_at: -1 } }
     ]);
 
-    res.json({ user, reviews: userReviews });
+    // 2. Lấy tất cả bài viết / địa điểm do người dùng đăng tải
+    const userPosts = await Location.find({
+      $or: [
+        { author_email: user.email.toLowerCase() },
+        { author_name: user.name }
+      ]
+    }).sort({ createdAt: -1 });
+
+    res.json({ 
+      user, 
+      reviews: userReviews, 
+      posts: userPosts, 
+      total_posts: userPosts.length,
+      total_reviews: userReviews.length 
+    });
   } catch (err) {
     res.status(500).json({ error: 'Lỗi tải trang cá nhân', details: err.message });
   }
@@ -800,13 +904,38 @@ app.post('/api/auth/save-location/:id', async (req, res) => {
 });
 
 // =====================================================================
-// 12. API STORIES PHONG CÁCH MẠNG XÃ HỘI (LƯU TRỮ TRỰC TIẾP TRÊN MONGODB)
+// 12. API STORIES PHONG CÁCH MẠNG XÃ HỘI (LƯU TRỮ TRỰC TIẾP TRÊN MONGODB - 24H)
 // =====================================================================
 
-// Lấy danh sách Story mới nhất (Luôn đồng bộ avatar mới nhất từ User Profile)
+// Lấy danh sách Story trong vòng 24 giờ qua (Luôn đồng bộ avatar mới nhất từ User Profile)
 app.get('/api/stories', async (req, res) => {
   try {
-    const stories = await Story.find().sort({ createdAt: -1 }).limit(20).lean();
+    const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const timeFilter = {
+      $or: [
+        { createdAt: { $gte: cutoff24h } },
+        { created_at: { $gte: cutoff24h } }
+      ]
+    };
+
+    let stories = await Story.find(timeFilter)
+      .sort({ createdAt: -1, created_at: -1 })
+      .limit(30)
+      .lean();
+
+    // Nếu toàn bộ story đã quá 24h, tự động kích hoạt 3 story mẫu gần nhất sang thời gian hiện tại
+    if (stories.length === 0) {
+      const pastStories = await Story.find().sort({ created_at: -1, createdAt: -1 }).limit(3);
+      for (const s of pastStories) {
+        s.createdAt = new Date();
+        s.created_at = new Date();
+        await s.save();
+      }
+      stories = await Story.find(timeFilter)
+        .sort({ createdAt: -1, created_at: -1 })
+        .limit(30)
+        .lean();
+    }
 
     // Tự động đồng bộ ảnh đại diện mới nhất của tác giả từ bảng User
     const emails = [...new Set(stories.map(s => s.user_email).filter(Boolean))];
@@ -843,7 +972,7 @@ app.post('/api/stories', async (req, res) => {
     const newStory = new Story({
       user_name,
       user_avatar: user_avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
-      user_email: user_email || 'guest@foodtravel.vn',
+      user_email: user_email ? user_email.toLowerCase().trim() : 'guest@foodtravel.vn',
       location_name,
       location_city: location_city || 'Việt Nam',
       image,
@@ -851,13 +980,38 @@ app.post('/api/stories', async (req, res) => {
       filter: filter || 'normal',
       music: music || 'Nhạc thịnh hành 🎵',
       likes_count: 1,
-      liked_by: user_email ? [user_email] : []
+      liked_by: user_email ? [user_email.toLowerCase().trim()] : []
     });
 
     const savedStory = await newStory.save();
     res.status(201).json({ message: 'Đăng story thành công!', story: savedStory });
   } catch (err) {
     res.status(500).json({ error: 'Lỗi tạo story mới', details: err.message });
+  }
+});
+
+// Xóa Story (Chỉ tác giả hoặc Quản trị viên)
+app.delete('/api/stories/:id', async (req, res) => {
+  try {
+    const storyId = req.params.id;
+    const { user_email } = req.body;
+
+    const story = await Story.findById(storyId);
+    if (!story) {
+      return res.status(404).json({ error: 'Không tìm thấy khoảnh khắc Story' });
+    }
+
+    const isAdmin = user_email && (user_email.toLowerCase().includes('admin') || user_email.toLowerCase() === 'vanngoc@foodtravel.vn');
+    if (story.user_email && story.user_email.trim() !== '') {
+      if (!user_email || (story.user_email.toLowerCase() !== user_email.toLowerCase() && !isAdmin)) {
+        return res.status(403).json({ error: 'Bạn chỉ có thể xóa Story do chính bạn đăng!' });
+      }
+    }
+
+    await Story.findByIdAndDelete(storyId);
+    res.json({ message: 'Đã xóa story thành công!', id: storyId });
+  } catch (err) {
+    res.status(500).json({ error: 'Lỗi xóa story', details: err.message });
   }
 });
 
@@ -869,18 +1023,19 @@ app.post('/api/stories/:id/react', async (req, res) => {
     const story = await Story.findById(storyId);
     if (!story) return res.status(404).json({ error: 'Không tìm thấy story' });
 
-    const isLiked = story.liked_by && story.liked_by.includes(user_email);
+    const cleanEmail = user_email ? user_email.toLowerCase().trim() : '';
+    const isLiked = story.liked_by && story.liked_by.includes(cleanEmail);
     let updated;
     if (isLiked) {
       updated = await Story.findByIdAndUpdate(
         storyId,
-        { $pull: { liked_by: user_email } },
+        { $pull: { liked_by: cleanEmail } },
         { new: true }
       );
     } else {
       updated = await Story.findByIdAndUpdate(
         storyId,
-        { $addToSet: { liked_by: user_email } },
+        { $addToSet: { liked_by: cleanEmail } },
         { new: true }
       );
     }
@@ -909,7 +1064,7 @@ app.post('/api/stories/:id/reply', async (req, res) => {
     const newReply = {
       user_name: user_name || 'Khách trải nghiệm',
       user_avatar: user_avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
-      user_email: user_email || '',
+      user_email: user_email ? user_email.toLowerCase().trim() : '',
       message: message.trim(),
       created_at: new Date()
     };
@@ -920,6 +1075,39 @@ app.post('/api/stories/:id/reply', async (req, res) => {
     res.status(201).json({ message: 'Gửi tin nhắn thành công', reply: newReply, replies_count: story.replies.length });
   } catch (err) {
     res.status(500).json({ error: 'Lỗi gửi tin nhắn cho tác giả story', details: err.message });
+  }
+});
+
+// Tác giả trả lời lại tin nhắn của bạn bè (Reply-Back)
+app.post('/api/stories/:id/reply-back', async (req, res) => {
+  try {
+    const storyId = req.params.id;
+    const { reply_index, reply_text } = req.body;
+
+    if (!reply_text || !reply_text.trim()) {
+      return res.status(400).json({ error: 'Vui lòng nhập nội dung trả lời!' });
+    }
+
+    const story = await Story.findById(storyId);
+    if (!story) return res.status(404).json({ error: 'Không tìm thấy Story' });
+
+    const idx = parseInt(reply_index);
+    if (isNaN(idx) || !story.replies || !story.replies[idx]) {
+      return res.status(400).json({ error: 'Không tìm thấy tin nhắn cần trả lời' });
+    }
+
+    story.replies[idx].reply_back = reply_text.trim();
+    story.replies[idx].reply_back_at = new Date();
+
+    story.markModified('replies');
+    await story.save();
+
+    res.json({ 
+      message: 'Đã gửi câu trả lời thành công!', 
+      reply: story.replies[idx] 
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Lỗi gửi phản hồi lại', details: err.message });
   }
 });
 
@@ -945,15 +1133,19 @@ app.get('/api/stories/my-replies/:email', async (req, res) => {
 
     const allReplies = [];
     stories.forEach(s => {
-      (s.replies || []).forEach(r => {
+      (s.replies || []).forEach((r, idx) => {
         allReplies.push({
           story_id: s._id,
+          reply_index: idx,
           story_caption: s.caption,
+          story_image: s.image,
           location_name: s.location_name,
           location_city: s.location_city,
           user_name: r.user_name,
           user_avatar: r.user_avatar,
           message: r.message,
+          reply_back: r.reply_back || '',
+          reply_back_at: r.reply_back_at || null,
           created_at: r.created_at
         });
       });

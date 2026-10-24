@@ -12,7 +12,7 @@ const reviewSchema = new mongoose.Schema({
   user_name: { type: String, required: true },
   avatar: { type: String, default: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100' },
   rating: { type: Number, required: true, min: 1, max: 5 },
-  content: { type: String, required: true },
+  content: { type: String, default: 'Đã đánh giá sao' },
   images: [{ type: String }],
   created_at: { type: Date, default: Date.now },
   replies: [replySchema]
@@ -28,6 +28,10 @@ const locationSchema = new mongoose.Schema({
   description: { type: String },
   price_range: { type: String, enum: ['BUDGET', 'MODERATE', 'LUXURY'], default: 'MODERATE' },
   images: [{ type: String }],
+  // Thông tin tác giả đăng bài
+  author_name: { type: String, default: 'Thành viên FoodTravel' },
+  author_email: { type: String, default: '' },
+  author_avatar: { type: String, default: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100' },
   // Cấu trúc GeoJSON 2dsphere chuẩn MongoDB
   location: {
     type: { type: String, enum: ['Point'], default: 'Point' },

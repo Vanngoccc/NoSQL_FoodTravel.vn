@@ -17,6 +17,8 @@ const storySchema = new mongoose.Schema({
     user_avatar: { type: String, default: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100' },
     user_email: { type: String, default: '' },
     message: { type: String, required: true },
+    reply_back: { type: String, default: '' },
+    reply_back_at: { type: Date },
     created_at: { type: Date, default: Date.now }
   }],
   created_at: { type: Date, default: Date.now }

@@ -145,37 +145,62 @@ function filterByTag(type, keyword) {
 function updateUserUI() {
   const section = document.getElementById('userAccountSection');
   const composerAvatar = document.getElementById('composerUserAvatar');
-  if (!section) return;
+  const fbComposerName = document.getElementById('fbComposerName');
+  const fbComposerAvatar = document.getElementById('fbComposerAvatar');
+  const storyPreviewUserName = document.getElementById('storyPreviewUserName');
+  const storyPreviewUserAvatar = document.getElementById('storyPreviewUserAvatar');
 
   if (currentUser) {
     if (composerAvatar) composerAvatar.src = currentUser.avatar;
+    if (fbComposerName) fbComposerName.textContent = currentUser.name;
+    if (fbComposerAvatar) fbComposerAvatar.src = currentUser.avatar;
+    if (storyPreviewUserName) storyPreviewUserName.textContent = currentUser.name;
+    if (storyPreviewUserAvatar) storyPreviewUserAvatar.src = currentUser.avatar;
 
-    section.innerHTML = `
-      <div class="flex items-center space-x-2 bg-slate-50 hover:bg-slate-100 pl-1.5 pr-3 py-1 rounded-full border border-slate-200 transition-all cursor-pointer" onclick="openProfileModal()">
-        <img src="${currentUser.avatar}" alt="${currentUser.name}" class="w-7 h-7 rounded-full object-cover border border-[#FF5422]">
-        <span class="text-xs font-bold text-slate-800 hidden sm:inline">${currentUser.name}</span>
-      </div>
-      <button onclick="openProfileModal()" class="px-3 py-1.5 rounded-full text-xs font-bold text-[#FF5422] bg-[#FF5422]/10 hover:bg-[#FF5422] hover:text-white transition-all cursor-pointer" title="Trang cá nhân">
-        <i class="fa-solid fa-user-gear"></i>
-      </button>
-    `;
+    if (section) {
+      section.innerHTML = `
+        <div class="flex items-center space-x-2 bg-slate-50 hover:bg-slate-100 pl-1.5 pr-3 py-1 rounded-full border border-slate-200 transition-all cursor-pointer" onclick="openProfileModal()">
+          <img src="${currentUser.avatar}" alt="${currentUser.name}" class="w-7 h-7 rounded-full object-cover border border-[#FF5422]">
+          <span class="text-xs font-bold text-slate-800 hidden sm:inline">${currentUser.name}</span>
+        </div>
+        <button onclick="openProfileModal()" class="px-3 py-1.5 rounded-full text-xs font-bold text-[#FF5422] bg-[#FF5422]/10 hover:bg-[#FF5422] hover:text-white transition-all cursor-pointer" title="Trang cá nhân">
+          <i class="fa-solid fa-user-gear"></i>
+        </button>
+      `;
+    }
 
     // Cập nhật form viết đánh giá
     const inputUser = document.getElementById('inputReviewUser');
+    const inputUserDisplay = document.getElementById('inputReviewUserDisplay');
     const avatarUser = document.getElementById('reviewUserAvatar');
     const authStatus = document.getElementById('reviewAuthStatus');
     if (inputUser) inputUser.value = currentUser.name;
+    if (inputUserDisplay) inputUserDisplay.textContent = currentUser.name;
     if (avatarUser) avatarUser.src = currentUser.avatar;
     if (authStatus) authStatus.innerHTML = `<i class="fa-solid fa-circle-check"></i> <span>Tài khoản: ${currentUser.name}</span>`;
   } else {
-    section.innerHTML = `
-      <button onclick="openAuthModal('login')" class="px-3 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 transition-colors cursor-pointer">
-        Đăng nhập
-      </button>
-      <button onclick="openAuthModal('register')" class="px-4 py-2 rounded-full text-xs font-bold bg-[#FF5422] hover:bg-[#E84615] text-white transition-all shadow-sm shadow-[#FF5422]/20 cursor-pointer">
-        Đăng ký
-      </button>
-    `;
+    if (fbComposerName) fbComposerName.textContent = 'Thành viên FoodTravel';
+    if (storyPreviewUserName) storyPreviewUserName.textContent = 'Thành viên FoodTravel';
+    if (section) {
+      section.innerHTML = `
+        <button onclick="openAuthModal('login')" class="px-3 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 transition-colors cursor-pointer">
+          Đăng nhập
+        </button>
+        <button onclick="openAuthModal('register')" class="px-4 py-2 rounded-full text-xs font-bold bg-[#FF5422] hover:bg-[#E84615] text-white transition-all shadow-sm shadow-[#FF5422]/20 cursor-pointer">
+          Đăng ký
+        </button>
+      `;
+    }
+  }
+}
+
+function togglePasswordVisibility(inputId, btn) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const isPass = input.type === 'password';
+  input.type = isPass ? 'text' : 'password';
+  if (btn) {
+    btn.innerHTML = isPass ? '<i class="fa-solid fa-eye-slash text-xs"></i>' : '<i class="fa-solid fa-eye text-xs"></i>';
   }
 }
 
@@ -184,6 +209,8 @@ function openAuthModal(mode = 'login') {
   const title = document.getElementById('authModalTitle');
   const nameContainer = document.getElementById('authNameFieldContainer');
   const switchBtn = document.getElementById('authSwitchBtn');
+  const passInput = document.getElementById('authPassword');
+  if (passInput) passInput.value = '';
 
   if (mode === 'login') {
     if (title) title.textContent = 'Đăng nhập tài khoản';
@@ -210,15 +237,21 @@ function closeAuthModal() {
 async function handleAuthSubmit() {
   const email = document.getElementById('authUserEmail').value.trim();
   const name = document.getElementById('authUserName').value.trim();
+  const password = document.getElementById('authPassword') ? document.getElementById('authPassword').value : '';
 
   if (!email) {
     alert('Vui lòng nhập email đăng nhập!');
     return;
   }
 
+  if (!password || password.trim().length < 4) {
+    alert('Vui lòng nhập mật khẩu tối thiểu 4 ký tự!');
+    return;
+  }
+
   try {
     let endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
-    let body = { email };
+    let body = { email, password: password.trim() };
     if (authMode === 'register') {
       if (!name) {
         alert('Vui lòng nhập họ và tên của bạn!');
@@ -240,9 +273,9 @@ async function handleAuthSubmit() {
       updateUserUI();
       closeAuthModal();
       fetchHeroOverviewStats();
-      alert(`Xin chào ${currentUser.name}! Tài khoản của bạn đã được kết nối với MongoDB.`);
+      alert(`Xin chào ${currentUser.name}! Bạn đã đăng nhập thành công.`);
     } else {
-      alert('Thông báo: ' + data.error);
+      alert('Thông báo: ' + (data.error || 'Đăng nhập thất bại'));
     }
   } catch (err) {
     console.error('Lỗi xác thực:', err);
@@ -270,10 +303,11 @@ async function openProfileModal() {
   document.getElementById('profileModalEmail').textContent = currentUser.email;
   document.getElementById('profileModalBio').textContent = currentUser.bio || 'Thành viên FoodTravel.vn';
 
-  // Đồng bộ thông tin và các bài đánh giá do user viết từ MongoDB
+  // Đồng bộ thông tin, bài viết đã đăng và bài đánh giá do user viết từ MongoDB
   try {
     let userData = null;
     let userReviews = [];
+    let userPosts = [];
 
     // Tìm profile theo ID hoặc Email
     if (currentUser._id) {
@@ -282,6 +316,7 @@ async function openProfileModal() {
         const data = await res.json();
         userData = data.user;
         userReviews = data.reviews || [];
+        userPosts = data.posts || [];
       }
     }
     if (!userData && currentUser.email) {
@@ -295,6 +330,7 @@ async function openProfileModal() {
           if (resProf.ok) {
             const profData = await resProf.json();
             userReviews = profData.reviews || [];
+            userPosts = profData.posts || [];
           }
         }
       }
@@ -304,10 +340,12 @@ async function openProfileModal() {
       currentUser = { ...currentUser, ...userData };
       localStorage.setItem('foodtravel_user', JSON.stringify(currentUser));
 
+      const postCountEl = document.getElementById('profilePostCount');
       const revCountEl = document.getElementById('profileReviewCount');
       const savedCountEl = document.getElementById('profileSavedCount');
       const savedBadgeEl = document.getElementById('profileSavedBadge');
 
+      if (postCountEl) postCountEl.textContent = userPosts.length;
       if (revCountEl) revCountEl.textContent = userReviews.length;
       const savedList = userData.saved_locations || [];
       if (savedCountEl) savedCountEl.textContent = savedList.length;
@@ -317,7 +355,44 @@ async function openProfileModal() {
         else savedBadgeEl.classList.add('hidden');
       }
 
-      // Render danh sách đánh giá đã viết
+      // 1. Render danh sách bài viết do người dùng đăng tải
+      const postsListEl = document.getElementById('profilePostsList');
+      if (postsListEl) {
+        if (userPosts.length === 0) {
+          postsListEl.innerHTML = '<div class="text-xs text-slate-400 text-center py-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200">Bạn chưa đăng bài viết nào. Hãy bấm "Chia sẻ bài viết" để chia sẻ địa điểm nhé!</div>';
+        } else {
+          postsListEl.innerHTML = userPosts.map(p => {
+            const pImg = (p.images && p.images.length > 0) ? p.images[0] : 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=200';
+            return `
+              <div class="p-2.5 bg-slate-50 hover:bg-slate-100/80 rounded-2xl border border-slate-200/80 text-xs flex items-center justify-between gap-2.5 transition-colors group">
+                <div class="flex items-center space-x-2.5 min-w-0 flex-1 cursor-pointer" onclick="closeProfileModal(); openLocationModal('${p._id}')">
+                  <img src="${pImg}" class="w-12 h-12 rounded-xl object-cover shrink-0 border border-slate-200 shadow-2xs">
+                  <div class="min-w-0 flex-1">
+                    <h5 class="text-xs font-bold text-slate-900 truncate group-hover:text-[#FF5422] transition-colors">${p.name}</h5>
+                    <div class="flex items-center space-x-1.5 text-[10px] text-slate-500 mt-0.5">
+                      <span>${p.city}</span>
+                      <span>•</span>
+                      <span class="text-[#FF5422] font-semibold">${p.category}</span>
+                      <span>•</span>
+                      <span class="text-slate-400">${formatPostTime(p.createdAt)}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="flex items-center space-x-1 shrink-0">
+                  <button onclick="closeProfileModal(); flyToLocationOnMap('${p._id}')" class="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-[#FF5422] hover:text-[#FF5422] text-[10px] font-bold text-slate-700 transition-all cursor-pointer shadow-2xs" title="Xem trên bản đồ">
+                    Bản đồ
+                  </button>
+                  <button onclick="deleteLocation('${p._id}', event)" class="w-7 h-7 rounded-lg bg-white border border-slate-200 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 text-slate-400 flex items-center justify-center text-xs transition-all cursor-pointer shadow-2xs" title="Xóa bài viết này">
+                    <i class="fa-solid fa-trash-can text-[11px]"></i>
+                  </button>
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+      }
+
+      // 2. Render danh sách đánh giá đã viết
       const listEl = document.getElementById('profileReviewsList');
       if (listEl) {
         if (userReviews.length === 0) {
@@ -335,11 +410,11 @@ async function openProfileModal() {
         }
       }
 
-      // Render danh sách địa điểm đã lưu
+      // 3. Render danh sách địa điểm đã lưu
       renderSavedLocationsList(savedList);
     }
 
-    // Lấy tất cả tin nhắn phản hồi từ các story của người dùng
+    // 4. Lấy tất cả tin nhắn phản hồi từ các story của người dùng và hỗ trợ trả lời lại
     if (currentUser.email) {
       const resReplies = await fetch(`/api/stories/my-replies/${encodeURIComponent(currentUser.email)}`);
       const repliesData = await resReplies.json();
@@ -360,7 +435,7 @@ async function openProfileModal() {
           msgListEl.innerHTML = '<div class="text-xs text-slate-400 text-center py-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200">Chưa có ai gửi tin nhắn đến khoảnh khắc của bạn.</div>';
         } else {
           msgListEl.innerHTML = repliesData.map(msg => `
-            <div class="p-2.5 bg-orange-50/50 rounded-xl border border-orange-100 text-xs space-y-1">
+            <div class="p-3 bg-orange-50/50 rounded-xl border border-orange-100 text-xs space-y-1.5">
               <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-1.5 font-bold text-slate-800">
                   <img src="${msg.user_avatar}" class="w-5 h-5 rounded-full object-cover">
@@ -368,11 +443,31 @@ async function openProfileModal() {
                 </div>
                 <span class="text-[10px] text-slate-500 font-medium">${formatMessageTime(msg.created_at)}</span>
               </div>
-              <p class="text-[11px] text-slate-700 font-medium">"${msg.message}"</p>
+              <p class="text-[11px] text-slate-700 font-medium bg-white p-2 rounded-lg border border-orange-100/50">"${msg.message}"</p>
               <div class="text-[10px] text-[#FF5422] font-semibold flex items-center space-x-1">
                 <i class="fa-solid fa-camera text-[9px]"></i>
                 <span>Khoảnh khắc: ${msg.location_name}</span>
               </div>
+
+              ${msg.reply_back ? `
+                <div class="p-2 bg-emerald-50 rounded-lg text-emerald-800 text-[11px] font-semibold flex items-start space-x-1.5 border border-emerald-100">
+                  <span class="text-emerald-600 font-bold">↳ Bạn:</span>
+                  <span>${msg.reply_back}</span>
+                </div>
+              ` : `
+                <div id="replyBox_${msg.story_id}_${msg.reply_index}" class="hidden pt-1 space-y-1.5">
+                  <div class="flex items-center space-x-1.5">
+                    <input type="text" id="replyInput_${msg.story_id}_${msg.reply_index}" placeholder="Nhập câu trả lời cho ${msg.user_name}..." class="flex-1 px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-[#FF5422]">
+                    <button onclick="sendStoryReplyBack('${msg.story_id}', ${msg.reply_index})" class="px-3 py-1.5 bg-[#FF5422] hover:bg-[#E84615] text-white rounded-lg text-xs font-bold cursor-pointer transition-colors shrink-0">
+                      Gửi
+                    </button>
+                  </div>
+                </div>
+                <button onclick="document.getElementById('replyBox_${msg.story_id}_${msg.reply_index}').classList.toggle('hidden')" class="text-[10px] font-bold text-[#FF5422] hover:underline cursor-pointer flex items-center space-x-1 pt-0.5">
+                  <i class="fa-solid fa-reply text-[9px]"></i>
+                  <span>Trả lời tin nhắn này</span>
+                </button>
+              `}
             </div>
           `).join('');
         }
@@ -382,8 +477,40 @@ async function openProfileModal() {
     console.error('Lỗi tải profile data:', e);
   }
 
-  switchProfileTab('reviews');
+  switchProfileTab('posts');
   modal.classList.remove('hidden');
+}
+
+// Gửi câu trả lời cho tin nhắn story
+async function sendStoryReplyBack(storyId, replyIndex) {
+  const input = document.getElementById(`replyInput_${storyId}_${replyIndex}`);
+  if (!input) return;
+  const replyText = input.value.trim();
+  if (!replyText) {
+    alert('Vui lòng nhập nội dung câu trả lời!');
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/stories/${storyId}/reply-back`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        reply_index: replyIndex,
+        reply_text: replyText
+      })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      alert('Đã gửi câu trả lời thành công!');
+      openProfileModal();
+      switchProfileTab('messages');
+    } else {
+      alert('Lỗi: ' + data.error);
+    }
+  } catch (err) {
+    console.error('Lỗi gửi reply back:', err);
+  }
 }
 
 // Render danh sách địa điểm đã lưu trong trang cá nhân
@@ -443,26 +570,34 @@ function renderSavedLocationsList(savedLocs) {
 }
 
 function switchProfileTab(tab) {
+  const btnPosts = document.getElementById('btnProfileTabPosts');
   const btnReviews = document.getElementById('btnProfileTabReviews');
   const btnSaved = document.getElementById('btnProfileTabSaved');
   const btnMessages = document.getElementById('btnProfileTabMessages');
+
+  const listPosts = document.getElementById('profilePostsList');
   const listReviews = document.getElementById('profileReviewsList');
   const listSaved = document.getElementById('profileSavedList');
   const listMessages = document.getElementById('profileStoryRepliesList');
 
-  const defaultTabClass = 'text-xs font-semibold text-slate-400 hover:text-slate-700 pb-1 cursor-pointer transition-colors flex items-center space-x-1.5';
-  const activeTabClass = 'text-xs font-bold text-[#FF5422] border-b-2 border-[#FF5422] pb-1 cursor-pointer transition-colors flex items-center space-x-1.5';
+  const defaultTabClass = 'text-xs font-semibold text-slate-400 hover:text-slate-700 pb-1 cursor-pointer transition-colors flex items-center space-x-1 shrink-0';
+  const activeTabClass = 'text-xs font-bold text-[#FF5422] border-b-2 border-[#FF5422] pb-1 cursor-pointer transition-colors flex items-center space-x-1 shrink-0';
 
-  if (btnReviews) btnReviews.className = defaultTabClass.replace('flex items-center space-x-1.5', '');
+  if (btnPosts) btnPosts.className = defaultTabClass;
+  if (btnReviews) btnReviews.className = defaultTabClass;
   if (btnSaved) btnSaved.className = defaultTabClass;
   if (btnMessages) btnMessages.className = defaultTabClass;
 
+  if (listPosts) listPosts.classList.add('hidden');
   if (listReviews) listReviews.classList.add('hidden');
   if (listSaved) listSaved.classList.add('hidden');
   if (listMessages) listMessages.classList.add('hidden');
 
-  if (tab === 'reviews') {
-    if (btnReviews) btnReviews.className = 'text-xs font-bold text-[#FF5422] border-b-2 border-[#FF5422] pb-1 cursor-pointer transition-colors';
+  if (tab === 'posts') {
+    if (btnPosts) btnPosts.className = 'text-xs font-bold text-rose-500 border-b-2 border-rose-500 pb-1 cursor-pointer transition-colors shrink-0';
+    if (listPosts) listPosts.classList.remove('hidden');
+  } else if (tab === 'reviews') {
+    if (btnReviews) btnReviews.className = activeTabClass;
     if (listReviews) listReviews.classList.remove('hidden');
   } else if (tab === 'saved') {
     if (btnSaved) btnSaved.className = activeTabClass;
@@ -521,8 +656,10 @@ async function fetchLocations() {
     const searchVal = document.getElementById('searchInput').value.trim();
     const cityVal = document.getElementById('filterCity').value;
     const sortVal = document.getElementById('sortBy').value;
+    const filterTime = document.getElementById('filterTime');
+    const timeVal = filterTime ? filterTime.value : 'all';
 
-    let url = `/api/locations?city=${cityVal}&category=${currentCategoryFilter}&sort=${sortVal}`;
+    let url = `/api/locations?city=${cityVal}&category=${currentCategoryFilter}&sort=${sortVal}&time=${timeVal}`;
     if (searchVal) {
       url += `&search=${encodeURIComponent(searchVal)}`;
     }
@@ -586,29 +723,50 @@ function renderLocationsPage() {
     const likesCount = loc.likes_count || 0;
     const isSaved = isLocationSaved(loc._id);
 
-    // Lấy thông tin tác giả đánh giá thực tế từ MongoDB
-    const authorName = (loc.reviews && loc.reviews.length > 0) ? loc.reviews[0].user_name : 'Huỳnh Văn Ngọc';
-    const authorAvatar = (loc.reviews && loc.reviews.length > 0 && loc.reviews[0].avatar) ? loc.reviews[0].avatar : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100';
+    // Lấy thông tin tác giả bài viết từ MongoDB (ưu tiên author_name / author_avatar)
+    const authorName = loc.author_name || (loc.reviews && loc.reviews.length > 0 ? loc.reviews[0].user_name : 'Thành viên FoodTravel');
+    const authorAvatar = loc.author_avatar || (loc.reviews && loc.reviews.length > 0 && loc.reviews[0].avatar ? loc.reviews[0].avatar : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100');
+    const timeAgoStr = formatPostTime(loc.createdAt);
+
+    const isMyPost = currentUser && (
+      (loc.author_email && loc.author_email.toLowerCase() === currentUser.email.toLowerCase()) ||
+      (currentUser.email && currentUser.email.toLowerCase() === 'vanngoc@foodtravel.vn') ||
+      (currentUser.email && currentUser.email.toLowerCase().includes('admin'))
+    );
 
     return `
       <div class="bg-white rounded-3xl overflow-hidden border border-slate-200/80 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between group">
         <div>
-          <!-- Header Thẻ: Người đăng & Tỉnh thành (Đồng bộ MongoDB) -->
+          <!-- Header Thẻ: Người đăng & Tỉnh thành & Thời gian đăng (Đồng bộ MongoDB) -->
           <div class="p-3.5 pb-2.5 flex items-center justify-between">
-            <div class="flex items-center space-x-2.5">
-              <img src="${authorAvatar}" class="w-8 h-8 rounded-full object-cover border border-slate-100">
-              <div>
-                <h4 class="text-xs font-bold text-slate-900 leading-tight">${authorName}</h4>
-                <div onclick="flyToLocationOnMap('${loc._id}', event)" class="flex items-center space-x-1 text-[10px] text-slate-400 hover:text-[#FF5422] cursor-pointer transition-colors" title="Lia bản đồ tới ${loc.name}">
-                  <i class="fa-solid fa-location-dot text-[#FF5422]"></i>
-                  <span>${loc.city}</span>
+            <div class="flex items-center space-x-2.5 min-w-0">
+              <img src="${authorAvatar}" class="w-8 h-8 rounded-full object-cover border border-slate-100 shrink-0">
+              <div class="min-w-0">
+                <div class="flex items-center space-x-1.5 truncate">
+                  <h4 class="text-xs font-bold text-slate-900 leading-tight truncate">${authorName}</h4>
+                  ${isMyPost ? '<span class="text-[9px] px-1.5 py-0.5 bg-rose-50 text-rose-600 font-bold rounded shrink-0">Tác giả</span>' : ''}
+                </div>
+                <div class="flex items-center space-x-1.5 text-[10px] text-slate-400 mt-0.5">
+                  <div onclick="flyToLocationOnMap('${loc._id}', event)" class="flex items-center space-x-0.5 hover:text-[#FF5422] cursor-pointer transition-colors" title="Lia bản đồ tới ${loc.name}">
+                    <i class="fa-solid fa-location-dot text-[#FF5422] text-[9px]"></i>
+                    <span>${loc.city}</span>
+                  </div>
+                  <span>•</span>
+                  <span>${timeAgoStr}</span>
                 </div>
               </div>
             </div>
 
-            <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
-              ${loc.category || 'Ẩm thực'}
-            </span>
+            <div class="flex items-center space-x-1.5 shrink-0">
+              <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
+                ${loc.category || 'Ẩm thực'}
+              </span>
+              ${isMyPost ? `
+                <button onclick="deleteLocation('${loc._id}', event)" class="w-7 h-7 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center text-xs transition-colors cursor-pointer" title="Xóa bài viết của bạn">
+                  <i class="fa-solid fa-trash-can text-[11px]"></i>
+                </button>
+              ` : ''}
+            </div>
           </div>
 
           <!-- Thumbnail Hình ảnh, Nút Lưu nhanh & Badge Sao -->
@@ -678,6 +836,33 @@ function renderLocationsPage() {
   }).join('');
 
   renderPagination(allLocations.length);
+}
+
+// Xóa bài viết / địa điểm do chính tác giả đăng tải
+async function deleteLocation(id, event) {
+  if (event) event.stopPropagation();
+  if (!confirm('Bạn có chắc chắn muốn xóa bài viết này không?')) return;
+  try {
+    const res = await fetch(`/api/locations/${id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_email: currentUser ? currentUser.email : '' })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      alert('Đã xóa bài viết thành công!');
+      fetchLocations();
+      fetchHeroOverviewStats();
+      if (document.getElementById('locationDetailModal') && !document.getElementById('locationDetailModal').classList.contains('hidden')) {
+        closeLocationModal();
+      }
+      if (currentUser) openProfileModal();
+    } else {
+      alert('Lỗi: ' + data.error);
+    }
+  } catch (err) {
+    console.error('Lỗi xóa bài:', err);
+  }
 }
 
 // Bật tắt tim/like lưu trữ trực tiếp vào MongoDB
@@ -925,6 +1110,26 @@ function initLeafletMap() {
 
     // Canh chỉnh khung nhìn hiển thị trọn vẹn toàn bộ dải đất chữ S Việt Nam từ Bắc vào Nam
     mapInstance.fitBounds([[8.1, 102.0], [23.5, 109.8]], { padding: [15, 15] });
+
+    // Sự kiện nhấn vào bản đồ để chọn tọa độ chính xác khi tạo bài viết
+    mapInstance.on('click', function(e) {
+      if (isPickingOnMap) {
+        isPickingOnMap = false;
+        mapInstance.getContainer().style.cursor = '';
+        const lat = parseFloat(e.latlng.lat.toFixed(6));
+        const lng = parseFloat(e.latlng.lng.toFixed(6));
+        openNewLocationModal();
+        document.getElementById('newLocLat').value = lat;
+        document.getElementById('newLocLng').value = lng;
+        const coordsDisplay = document.getElementById('newLocCoordsDisplay');
+        if (coordsDisplay) {
+          coordsDisplay.innerHTML = `
+            <i class="fa-solid fa-circle-check text-emerald-500"></i>
+            <span class="text-emerald-700 font-bold">Đã ghim: ${lat}, ${lng}</span>
+          `;
+        }
+      }
+    });
   }
 
   // Invalidate kích thước container để bản đồ hiển thị đầy đủ ngay lập tức
@@ -1003,6 +1208,18 @@ function addUserLocationPinToMap(userLat, userLng, isFallback = false) {
   `);
 }
 
+// Chế độ chấm điểm trực tiếp trên bản đồ
+function enablePickLocationOnMap() {
+  closeNewLocationModal();
+  switchView('map');
+  isPickingOnMap = true;
+  if (!mapInstance) initLeafletMap();
+  if (mapInstance) {
+    mapInstance.getContainer().style.cursor = 'crosshair';
+  }
+  alert('🎯 Chế độ ghim bản đồ đã kích hoạt!\n\nHãy nhấn chuột (hoặc chạm tay trên màn hình) vào vị trí trên bản đồ bạn muốn chọn làm tọa độ bài viết.');
+}
+
 function renderMapMarkers(locations) {
   if (!mapInstance) return;
 
@@ -1027,9 +1244,26 @@ function renderMapMarkers(locations) {
     popupAnchor: [0, -38]
   });
 
+  // Bảng theo dõi tọa độ trùng để áp dụng micro-offset (spiderfy jitter)
+  // Giúp các bài viết có cùng vị trí hoặc gần sát nhau đều hiển thị rõ ràng, không bị đè che khuất!
+  const coordRegistry = {};
+
   locations.forEach(loc => {
     if (!loc.location || !loc.location.coordinates || loc.location.coordinates.length < 2) return;
-    const [lng, lat] = loc.location.coordinates;
+    let [lng, lat] = loc.location.coordinates;
+
+    const coordKey = `${lat.toFixed(5)},${lng.toFixed(5)}`;
+    if (coordRegistry[coordKey]) {
+      const offsetCount = coordRegistry[coordKey];
+      const angle = (offsetCount * 60) * (Math.PI / 180);
+      const radius = 0.00015 * Math.ceil(offsetCount / 6); // bán kính ~10-15 mét
+      lat += radius * Math.cos(angle);
+      lng += radius * Math.sin(angle);
+      coordRegistry[coordKey]++;
+    } else {
+      coordRegistry[coordKey] = 1;
+    }
+
     const marker = L.marker([lat, lng], { icon: orangePinIcon }).addTo(mapInstance);
     marker.locationId = loc._id.toString();
     
@@ -1347,6 +1581,28 @@ async function openLocationModal(locId) {
     document.getElementById('modalCoords').textContent = `[${loc.location.coordinates[0].toFixed(4)}, ${loc.location.coordinates[1].toFixed(4)}]`;
     document.getElementById('modalDescription').textContent = loc.description || 'Chưa có bài viết mô tả chi tiết.';
     
+    // Cập nhật thông tin Tác giả bài viết & Thời gian đăng
+    const authorName = loc.author_name || (loc.reviews && loc.reviews.length > 0 ? loc.reviews[0].user_name : 'Thành viên FoodTravel');
+    const authorAvatar = loc.author_avatar || (loc.reviews && loc.reviews.length > 0 && loc.reviews[0].avatar ? loc.reviews[0].avatar : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100');
+    const modalAuthorName = document.getElementById('modalAuthorName');
+    const modalAuthorAvatar = document.getElementById('modalAuthorAvatar');
+    const modalCreatedAtText = document.getElementById('modalCreatedAtText');
+    const modalDeleteBtn = document.getElementById('modalDeleteBtn');
+
+    if (modalAuthorName) modalAuthorName.textContent = authorName;
+    if (modalAuthorAvatar) modalAuthorAvatar.src = authorAvatar;
+    if (modalCreatedAtText) modalCreatedAtText.textContent = formatPostTime(loc.createdAt);
+
+    if (modalDeleteBtn) {
+      const isMyPost = currentUser && (
+        (loc.author_email && loc.author_email.toLowerCase() === currentUser.email.toLowerCase()) ||
+        (currentUser.email && currentUser.email.toLowerCase() === 'vanngoc@foodtravel.vn') ||
+        (currentUser.email && currentUser.email.toLowerCase().includes('admin'))
+      );
+      if (isMyPost) modalDeleteBtn.classList.remove('hidden');
+      else modalDeleteBtn.classList.add('hidden');
+    }
+
     const imgEl = document.getElementById('modalImg');
     if (imgEl) {
       imgEl.src = (loc.images && loc.images.length > 0) ? loc.images[0] : 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800';
@@ -1719,10 +1975,8 @@ async function submitReview() {
   const rating = parseInt(document.getElementById('inputReviewRating').value) || 5;
   const content = document.getElementById('inputReviewContent').value.trim();
 
-  if (!content) {
-    alert('Vui lòng nhập nội dung đánh giá của bạn!');
-    return;
-  }
+  // Cho phép đánh giá chấm sao trực tiếp mà không bắt buộc phải nhập bình luận văn bản
+  const reviewContent = content || (rating >= 4 ? 'Trải nghiệm rất tuyệt vời! ⭐⭐⭐⭐⭐' : `Đã chấm ${rating} sao cho địa điểm này.`);
 
   try {
     const res = await fetch(`/api/locations/${activeLocationId}/reviews`, {
@@ -1732,7 +1986,7 @@ async function submitReview() {
         user_name: userName, 
         avatar: userAvatar,
         rating, 
-        content 
+        content: reviewContent 
       })
     });
 
@@ -1788,25 +2042,27 @@ function closeNewLocationModal() {
   document.getElementById('newLocationModal').classList.add('hidden');
 }
 
-// Xử lý tải file ảnh thực tế (PNG, JPG, WEBP) từ thiết bị
+// Xử lý tải file ảnh thực tế (PNG, JPG, JPE, WEBP, GIF, BMP) từ thiết bị
 async function handleImageFileSelected(event) {
   const file = event.target.files[0];
   if (!file) return;
 
-  const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
-  if (!validTypes.includes(file.type)) {
-    alert('Vui lòng chọn đúng file ảnh định dạng PNG, JPG hoặc WEBP!');
+  const isImage = (file.type && file.type.startsWith('image/')) || file.name.match(/\.(jpe?g|png|webp|jfif|bmp|gif|svg)$/i);
+  if (!isImage) {
+    alert('Vui lòng chọn file hình ảnh hợp lệ (PNG, JPG, JPEG, JPE, WEBP, GIF)!');
     event.target.value = '';
     return;
   }
 
-  // 1. Hiển thị xem trước ảnh ngay lập tức bằng FileReader
+  // 1. Hiển thị xem trước ảnh ngay lập tức bằng FileReader và lưu DataURL làm fallback
   const reader = new FileReader();
   reader.onload = function(e) {
     document.getElementById('imgPreviewTag').src = e.target.result;
     document.getElementById('imgPreviewFileName').textContent = `📄 ${file.name} (${(file.size / 1024).toFixed(0)} KB)`;
     document.getElementById('imgPreviewBox').classList.remove('hidden');
     document.getElementById('uploadPromptBox').classList.add('hidden');
+    // Lưu tạm thời Data URL để nếu mạng chậm hay lỗi thì ảnh người dùng chọn vẫn được bảo toàn
+    document.getElementById('newLocImgUrl').value = e.target.result;
   };
   reader.readAsDataURL(file);
 
@@ -1820,11 +2076,11 @@ async function handleImageFileSelected(event) {
       body: formData
     });
     const data = await res.json();
-    if (res.ok) {
+    if (res.ok && data.url) {
       document.getElementById('newLocImgUrl').value = data.url;
       console.log('✅ Đã tải file ảnh lên thành công:', data.url);
     } else {
-      alert('Lỗi tải ảnh: ' + data.error);
+      console.warn('Upload ảnh qua máy chủ có thông báo:', data.error);
     }
   } catch (err) {
     console.error('Lỗi upload file:', err);
@@ -1852,12 +2108,23 @@ async function handleAvatarFileSelected(event) {
   const file = event.target.files[0];
   if (!file) return;
 
-  const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
-  if (!validTypes.includes(file.type)) {
-    alert('Vui lòng chọn file ảnh đại diện PNG, JPG hoặc WEBP!');
+  const isImage = (file.type && file.type.startsWith('image/')) || file.name.match(/\.(jpe?g|png|webp|jfif|bmp|gif|svg)$/i);
+  if (!isImage) {
+    alert('Vui lòng chọn file hình ảnh đại diện hợp lệ!');
     event.target.value = '';
     return;
   }
+
+  // Xem trước avatar ngay
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    document.getElementById('profileModalAvatar').src = e.target.result;
+    if (currentUser) {
+      currentUser.avatar = e.target.result;
+      updateUserUI();
+    }
+  };
+  reader.readAsDataURL(file);
 
   const formData = new FormData();
   formData.append('image', file);
@@ -1868,7 +2135,7 @@ async function handleAvatarFileSelected(event) {
       body: formData
     });
     const data = await res.json();
-    if (res.ok) {
+    if (res.ok && data.url) {
       currentUser.avatar = data.url;
       localStorage.setItem('foodtravel_user', JSON.stringify(currentUser));
       updateUserUI();
@@ -2110,6 +2377,10 @@ async function submitNewLocation() {
     return;
   }
 
+  const authorName = currentUser ? currentUser.name : 'Thành viên FoodTravel';
+  const authorAvatar = currentUser ? currentUser.avatar : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100';
+  const authorEmail = currentUser ? currentUser.email : '';
+
   try {
     const res = await fetch('/api/locations', {
       method: 'POST',
@@ -2121,7 +2392,10 @@ async function submitNewLocation() {
         images: [imgUrl],
         lng,
         lat,
-        description: desc
+        description: desc,
+        author_name: authorName,
+        author_email: authorEmail,
+        author_avatar: authorAvatar
       })
     });
 
@@ -2327,6 +2601,18 @@ function showCurrentStory() {
   if (timeEl) timeEl.textContent = formatStoryTime(st.created_at || st.createdAt);
   if (likeCountEl) likeCountEl.textContent = st.likes_count || 0;
   if (playPauseBtn) playPauseBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
+
+  // Hiển thị nút xóa Story nếu là chính tác giả hoặc Quản trị viên
+  const deleteBtn = document.getElementById('btnStoryDelete');
+  if (deleteBtn) {
+    const isOwner = currentUser && (
+      (st.user_email && st.user_email.toLowerCase() === currentUser.email.toLowerCase()) ||
+      (currentUser.email && currentUser.email.toLowerCase() === 'vanngoc@foodtravel.vn') ||
+      (currentUser.email && currentUser.email.toLowerCase().includes('admin'))
+    );
+    if (isOwner) deleteBtn.classList.remove('hidden');
+    else deleteBtn.classList.add('hidden');
+  }
 
   // Trạng thái nút Like
   const isLiked = st.liked_by && currentUser ? st.liked_by.includes(currentUser.email) : false;
@@ -2696,28 +2982,96 @@ function updateStoryPreviewCaption(text) {
   }
 }
 
-async function handleStoryImageUpload(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  const formData = new FormData();
-  formData.append('image', file);
+// Xóa khoảnh khắc Story (Chỉ tác giả hoặc admin)
+async function deleteCurrentStory() {
+  const st = allStories[currentStoryIndex];
+  if (!st) return;
+  if (!confirm('Bạn có chắc chắn muốn xóa khoảnh khắc Story này không?')) return;
 
   try {
-    const res = await fetch('/api/upload', {
-      method: 'POST',
-      body: formData
+    const res = await fetch(`/api/stories/${st._id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_email: currentUser ? currentUser.email : '' })
     });
     const data = await res.json();
-    if (res.ok && data.url) {
-      updateStoryPreviewImage(data.url);
-      const inputImg = document.getElementById('storyImageUrlInput');
-      if (inputImg) inputImg.value = data.url;
+    if (res.ok) {
+      alert('Đã xóa Story thành công!');
+      closeStoryViewer();
+      await fetchStories();
     } else {
-      alert('Lỗi tải ảnh: ' + (data.error || 'Vui lòng thử lại'));
+      alert('Lỗi: ' + data.error);
     }
   } catch (err) {
-    console.error('Lỗi upload ảnh:', err);
+    console.error('Lỗi xóa story:', err);
+  }
+}
+
+// Danh sách URL các ảnh đã tải lên để hỗ trợ đăng nhiều story cùng lúc
+let selectedStoryImagesList = [];
+
+async function handleStoryImageUpload(event) {
+  const files = event.target.files;
+  if (!files || files.length === 0) return;
+
+  const countBadge = document.getElementById('storyMultiFileCount');
+  if (files.length > 1) {
+    if (countBadge) {
+      countBadge.textContent = `Đã chọn ${files.length} ảnh khoảnh khắc`;
+      countBadge.classList.remove('hidden');
+    }
+  } else {
+    if (countBadge) countBadge.classList.add('hidden');
+  }
+
+  // 1. Xem trước ảnh đầu tiên ngay lập tức bằng FileReader
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    updateStoryPreviewImage(e.target.result);
+    const inputImg = document.getElementById('storyImageUrlInput');
+    if (inputImg) inputImg.value = e.target.result;
+    if (files.length === 1) {
+      selectedStoryImagesList = [e.target.result];
+    }
+  };
+  reader.readAsDataURL(files[0]);
+
+  // 2. Upload file lên máy chủ (/uploads/)
+  try {
+    if (files.length === 1) {
+      const formData = new FormData();
+      formData.append('image', files[0]);
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      if (res.ok && data.url) {
+        updateStoryPreviewImage(data.url);
+        const inputImg = document.getElementById('storyImageUrlInput');
+        if (inputImg) inputImg.value = data.url;
+        selectedStoryImagesList = [data.url];
+      }
+    } else {
+      // Đăng nhiều story cùng lúc: Tải hàng loạt ảnh
+      const formData = new FormData();
+      for (let i = 0; i < files.length; i++) {
+        formData.append('images', files[i]);
+      }
+      const res = await fetch('/api/upload-multiple', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      if (res.ok && data.urls && data.urls.length > 0) {
+        selectedStoryImagesList = data.urls;
+        updateStoryPreviewImage(data.urls[0]);
+        const inputImg = document.getElementById('storyImageUrlInput');
+        if (inputImg) inputImg.value = data.urls[0];
+      }
+    }
+  } catch (err) {
+    console.error('Lỗi upload story ảnh:', err);
   }
 }
 
@@ -2726,42 +3080,77 @@ async function submitNewStory() {
   const opt = select ? select.options[select.selectedIndex] : null;
   const location_name = opt ? opt.value : 'Việt Nam';
   const location_city = opt ? opt.getAttribute('data-city') : 'Việt Nam';
-  const image = document.getElementById('storyImageUrlInput').value.trim() || (opt ? opt.getAttribute('data-img') : '');
+  const singleImage = document.getElementById('storyImageUrlInput').value.trim() || (opt ? opt.getAttribute('data-img') : '');
   const caption = document.getElementById('storyCaptionInput').value.trim() || 'Trải nghiệm tuyệt vời!';
 
-  if (!image) {
+  const imagesToPost = (selectedStoryImagesList.length > 0) ? selectedStoryImagesList : [singleImage];
+  const validImages = imagesToPost.filter(Boolean);
+
+  if (validImages.length === 0) {
     alert('Vui lòng chọn hoặc tải lên hình ảnh cho Story!');
     return;
   }
 
-  const payload = {
-    user_name: currentUser ? currentUser.name : 'Huỳnh Văn Ngọc',
-    user_avatar: currentUser ? currentUser.avatar : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
-    user_email: currentUser ? currentUser.email : 'vanngoc@foodtravel.vn',
-    location_name,
-    location_city,
-    image,
-    caption
-  };
+  const authorName = currentUser ? currentUser.name : 'Thành viên FoodTravel';
+  const authorAvatar = currentUser ? currentUser.avatar : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100';
+  const authorEmail = currentUser ? currentUser.email : 'guest@foodtravel.vn';
 
   try {
-    const res = await fetch('/api/stories', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+    // Đăng đồng thời từng Story nếu người dùng chọn nhiều ảnh cùng lúc
+    const promises = validImages.map(img => {
+      const payload = {
+        user_name: authorName,
+        user_avatar: authorAvatar,
+        user_email: authorEmail,
+        location_name,
+        location_city,
+        image: img,
+        caption
+      };
+      return fetch('/api/stories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
     });
-    const data = await res.json();
 
-    if (res.ok) {
-      closeCreateStoryModal();
-      // Tải lại Stories từ MongoDB
-      await fetchStories();
-      // Tự động mở xem story vừa tạo
-      openStoryViewer(0);
-    } else {
-      alert('Lỗi đăng story: ' + (data.error || 'Vui lòng thử lại'));
-    }
+    await Promise.all(promises);
+    selectedStoryImagesList = [];
+    const countBadge = document.getElementById('storyMultiFileCount');
+    if (countBadge) countBadge.classList.add('hidden');
+
+    closeCreateStoryModal();
+    // Tải lại Stories từ MongoDB
+    await fetchStories();
+    // Tự động mở xem story vừa tạo
+    openStoryViewer(0);
+    alert(`Đã đăng thành công ${validImages.length} khoảnh khắc Story lên MongoDB!`);
   } catch (err) {
     console.error('Lỗi lưu story:', err);
+    alert('Lỗi khi lưu story: ' + err.message);
   }
+}
+
+// Định dạng thời gian đăng bài viết (thân thiện, trực quan: Vừa xong, 5 phút trước, 2 giờ trước...)
+function formatPostTime(dateString) {
+  if (!dateString) return 'Vừa xong';
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return 'Vừa xong';
+
+  const now = new Date();
+  const diffMs = now - date;
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHour = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHour / 24);
+
+  if (diffSec < 60) return 'Vừa xong';
+  if (diffMin < 60) return `${diffMin} phút trước`;
+  if (diffHour < 24) return `${diffHour} giờ trước`;
+  if (diffDay < 7) return `${diffDay} ngày trước`;
+  
+  const d = date.getDate().toString().padStart(2, '0');
+  const m = (date.getMonth() + 1).toString().padStart(2, '0');
+  const y = date.getFullYear();
+  return `${d}/${m}/${y}`;
 }
