@@ -175,23 +175,43 @@ function filterByTag(type, keyword) {
 // =====================================================================
 // ĐỒNG BỘ AVATAR VÀ THÔNG BÁO THỜI GIAN THỰC (MONGODB)
 // =====================================================================
-window.userAvatarMap = window.userAvatarMap || {};
+window.userAvatarMap = {
+  "huỳnh văn ngọc": "/uploads/upload-1791643118362-205632.jpg",
+  "vanngoc@foodtravel.vn": "/uploads/upload-1791643118362-205632.jpg",
+  "thanh trúc": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150",
+  "thanhtruc@foodtravel.vn": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150",
+  "minh tuấn": "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150",
+  "lan anh foodie": "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150",
+  "hoàng long travel": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150",
+  "vũ mai linh": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
+  "bùi phương thảo": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150"
+};
 
 function getConsistentAvatar(name, customAvatar) {
   const clean = (name || '').trim();
   const cleanLower = clean.toLowerCase();
 
-  // 1. Nếu là chính người dùng đang đăng nhập thì luôn ưu tiên avatar thực tế của họ
-  if (currentUser && currentUser.name && currentUser.name.toLowerCase().trim() === cleanLower && currentUser.avatar) {
-    return currentUser.avatar;
-  }
-
-  // 2. Tra cứu từ từ điển Avatar toàn cục đã đồng bộ từ User collection MongoDB
+  // 1. ƯU TIÊN SỐ 1: Luôn tra cứu từ từ điển Avatar MongoDB
   if (window.userAvatarMap && window.userAvatarMap[cleanLower]) {
-    return window.userAvatarMap[cleanLower];
+    const verifiedAvatar = window.userAvatarMap[cleanLower];
+    // Đồng bộ ngay vào currentUser nếu là tài khoản của người dùng hiện tại
+    if (currentUser && currentUser.name && currentUser.name.toLowerCase().trim() === cleanLower) {
+      if (currentUser.avatar !== verifiedAvatar) {
+        currentUser.avatar = verifiedAvatar;
+        localStorage.setItem('foodtravel_user', JSON.stringify(currentUser));
+      }
+    }
+    return verifiedAvatar;
   }
 
-  // 3. Nếu có customAvatar hợp lệ (Data URL, URL ảnh thật, uploads) và không phải ui-avatars hay placeholder mặc định
+  // 2. Nếu là chính currentUser và có ảnh tự upload hợp lệ (không phải ảnh demo / placeholder)
+  if (currentUser && currentUser.name && currentUser.name.toLowerCase().trim() === cleanLower && currentUser.avatar) {
+    if (!currentUser.avatar.includes('ui-avatars.com') && !currentUser.avatar.includes('photo-1535713875002-d1d0cf377fde')) {
+      return currentUser.avatar;
+    }
+  }
+
+  // 3. Nếu có customAvatar hợp lệ
   if (customAvatar && customAvatar.trim() && 
       !customAvatar.includes('ui-avatars.com') && 
       !customAvatar.includes('photo-1535713875002-d1d0cf377fde') && 
@@ -512,6 +532,7 @@ async function openProfileModal(initialTab = 'posts') {
     return;
   }
 
+  window.viewingOtherUserProfile = false;
   const modal = document.getElementById('userProfileModal');
 
   // Khôi phục các nút riêng của tài khoản hiện tại
@@ -850,6 +871,8 @@ async function openUserProfile(name, email, event) {
   const modal = document.getElementById('userProfileModal');
   if (!modal) return;
 
+  window.viewingOtherUserProfile = true;
+
   // Ẩn các nút chỉnh sửa/đăng xuất/hộp thư/đã lưu của riêng mình
   const editAvatarBtn = document.getElementById('profileAvatarEditBtn');
   const logoutBtn = document.getElementById('profileLogoutBtn');
@@ -1111,6 +1134,12 @@ function switchProfileTab(tab) {
     if (btnMessages) btnMessages.className = activeTabClass;
     if (listMessages) listMessages.classList.remove('hidden');
   }
+
+  // Nếu đang xem trang cá nhân của thành viên khác, luôn ẩn các tab riêng tư (Đã lưu & Hộp thư)
+  if (window.viewingOtherUserProfile) {
+    if (btnSaved) btnSaved.classList.add('hidden');
+    if (btnMessages) btnMessages.classList.add('hidden');
+  }
 }
 
 function closeProfileModal() {
@@ -1234,7 +1263,7 @@ function renderLocationsPage() {
     const authorName = (loc.author_name && loc.author_name.trim() && loc.author_name !== 'Thành viên FoodTravel' && loc.author_name !== 'Người khám phá') 
       ? loc.author_name 
       : (isMyPost ? currentUser.name : (loc.reviews && loc.reviews.length > 0 && loc.reviews[0].user_name ? loc.reviews[0].user_name : (currentUser ? currentUser.name : 'Huỳnh Văn Ngọc')));
-    const authorAvatar = isMyPost ? currentUser.avatar : getConsistentAvatar(authorName, loc.author_avatar);
+    const authorAvatar = getConsistentAvatar(authorName, isMyPost ? currentUser.avatar : loc.author_avatar);
     const timeAgoStr = formatPostTime(loc.createdAt);
 
     return `
@@ -2099,7 +2128,7 @@ async function openLocationModal(locId) {
     const authorName = (loc.author_name && loc.author_name.trim() && loc.author_name !== 'Thành viên FoodTravel' && loc.author_name !== 'Người khám phá') 
       ? loc.author_name 
       : (isMyPost ? currentUser.name : (loc.reviews && loc.reviews.length > 0 && loc.reviews[0].user_name ? loc.reviews[0].user_name : (currentUser ? currentUser.name : 'Huỳnh Văn Ngọc')));
-    const authorAvatar = isMyPost ? currentUser.avatar : getConsistentAvatar(authorName, loc.author_avatar);
+    const authorAvatar = getConsistentAvatar(authorName, isMyPost ? currentUser.avatar : loc.author_avatar);
 
     const modalAuthorName = document.getElementById('modalAuthorName');
     const modalAuthorAvatar = document.getElementById('modalAuthorAvatar');
