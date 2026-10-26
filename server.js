@@ -618,7 +618,47 @@ app.post('/api/locations', async (req, res) => {
 });
 
 // =====================================================================
-// 7.1 API XÓA ĐỊA ĐIỂM / BÀI VIẾT (Chỉ tác giả hoặc Quản trị viên)
+// 7.1 API CẬP NHẬT ĐỊA ĐIỂM / BÀI VIẾT (Chỉ tác giả sở hữu bài viết)
+// =====================================================================
+app.put('/api/locations/:id', async (req, res) => {
+  try {
+    const locationId = req.params.id;
+    const { user_email, name, category, city, address, description, price_range, images } = req.body;
+
+    const loc = await Location.findById(locationId);
+    if (!loc) {
+      return res.status(404).json({ error: 'Không tìm thấy địa điểm / bài viết' });
+    }
+
+    // Kiểm tra quyền tác giả: chỉ người tạo mới có quyền chỉnh sửa bài viết
+    if (loc.author_email && loc.author_email.trim() !== '') {
+      if (!user_email || loc.author_email.toLowerCase() !== user_email.toLowerCase()) {
+        return res.status(403).json({ error: 'Bạn chỉ có quyền chỉnh sửa bài viết do chính mình đăng tải!' });
+      }
+    }
+
+    const updateFields = {};
+    if (name) updateFields.name = name;
+    if (category) updateFields.category = category;
+    if (city) updateFields.city = city;
+    if (address) updateFields.address = address;
+    if (description) updateFields.description = description;
+    if (price_range) updateFields.price_range = price_range;
+    if (images && Array.isArray(images)) updateFields.images = images;
+
+    const updatedLoc = await Location.findByIdAndUpdate(
+      locationId,
+      { $set: updateFields },
+      { new: true }
+    );
+    res.json({ message: 'Đã cập nhật bài viết thành công!', location: updatedLoc });
+  } catch (err) {
+    res.status(500).json({ error: 'Lỗi cập nhật địa điểm', details: err.message });
+  }
+});
+
+// =====================================================================
+// 7.2 API XÓA ĐỊA ĐIỂM / BÀI VIẾT (Chỉ tác giả sở hữu bài viết)
 // =====================================================================
 app.delete('/api/locations/:id', async (req, res) => {
   try {
@@ -630,10 +670,9 @@ app.delete('/api/locations/:id', async (req, res) => {
       return res.status(404).json({ error: 'Không tìm thấy địa điểm / bài viết' });
     }
 
-    // Kiểm tra quyền: nếu bài có author_email thì phải khớp user_email hoặc admin
-    const isAdmin = user_email && (user_email.toLowerCase().includes('admin') || user_email.toLowerCase() === 'vanngoc@foodtravel.vn');
+    // Kiểm tra quyền tác giả: chỉ người tạo mới có quyền xóa bài viết
     if (loc.author_email && loc.author_email.trim() !== '') {
-      if (!user_email || (loc.author_email.toLowerCase() !== user_email.toLowerCase() && !isAdmin)) {
+      if (!user_email || loc.author_email.toLowerCase() !== user_email.toLowerCase()) {
         return res.status(403).json({ error: 'Bạn chỉ có quyền xóa bài viết do chính mình đăng tải!' });
       }
     }
