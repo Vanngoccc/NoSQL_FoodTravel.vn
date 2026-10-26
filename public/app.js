@@ -1261,6 +1261,7 @@ function renderLocationsPage() {
       : (isMyPost ? currentUser.name : (loc.reviews && loc.reviews.length > 0 && loc.reviews[0].user_name ? loc.reviews[0].user_name : (currentUser ? currentUser.name : 'Huỳnh Văn Ngọc')));
     const authorAvatar = getConsistentAvatar(authorName, isMyPost ? currentUser.avatar : loc.author_avatar);
     const timeAgoStr = formatPostTime(loc.createdAt);
+    const cardTotalComments = countTotalReviews(loc);
 
     return `
       <div class="bg-white rounded-3xl overflow-hidden border border-slate-200/80 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between group">
@@ -1308,8 +1309,8 @@ function renderLocationsPage() {
 
             <div class="absolute bottom-3 left-3 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-slate-900/75 backdrop-blur-md text-amber-400 flex items-center space-x-1 shadow-sm">
               <i class="fa-solid fa-star text-xs"></i>
-              <span>${(loc.total_reviews && loc.total_reviews > 0) ? (loc.rating_avg ? loc.rating_avg.toFixed(1) : '0.0') : 'Mới'}</span>
-              <span class="text-slate-300 text-[10px] font-normal">(${loc.total_reviews || 0})</span>
+              <span>${(cardTotalComments > 0) ? (loc.rating_avg ? loc.rating_avg.toFixed(1) : '0.0') : 'Mới'}</span>
+              <span class="text-slate-300 text-[10px] font-normal">(${cardTotalComments})</span>
             </div>
           </div>
 
@@ -1337,7 +1338,7 @@ function renderLocationsPage() {
             <!-- Nút Bình luận -->
             <button onclick="openLocationModal('${loc._id}')" class="flex items-center space-x-1.5 text-slate-600 hover:text-[#FF5422] transition-colors cursor-pointer" title="Xem bình luận">
               <i class="fa-regular fa-comment text-sm"></i>
-              <span>${loc.total_reviews || 0}</span>
+              <span>${cardTotalComments}</span>
             </button>
 
             <!-- Nút Lưu địa điểm (Bookmark MongoDB) -->
@@ -2110,8 +2111,9 @@ async function openLocationModal(locId) {
     const addressDisplay = loc.address && loc.address.trim() ? loc.address : loc.city;
     document.getElementById('modalCity').querySelector('span').textContent = addressDisplay;
     document.getElementById('modalCategoryBadge').textContent = loc.category;
-    document.getElementById('modalRatingAvg').textContent = (loc.total_reviews && loc.total_reviews > 0) ? (loc.rating_avg ? loc.rating_avg.toFixed(1) : '0.0') : 'Chưa có đánh giá';
-    document.getElementById('modalTotalReviews').textContent = `${loc.total_reviews || 0} đánh giá`;
+    const totalComments = countTotalReviews(loc);
+    document.getElementById('modalRatingAvg').textContent = (totalComments > 0) ? (loc.rating_avg ? loc.rating_avg.toFixed(1) : '0.0') : 'Chưa có đánh giá';
+    document.getElementById('modalTotalReviews').textContent = `${totalComments} bình luận`;
     document.getElementById('modalCoords').textContent = `[${loc.location.coordinates[0].toFixed(4)}, ${loc.location.coordinates[1].toFixed(4)}]`;
     document.getElementById('modalDescription').textContent = loc.description || 'Chưa có bài viết mô tả chi tiết.';
     
@@ -2605,15 +2607,37 @@ async function toggleCommentLike(type, locId, reviewId, btnEl, replyId = '') {
   }
 }
 
+// Hàm tính tổng tất cả bình luận (Đánh giá gốc + Phản hồi Level 2 + Phản hồi con Level 3/4/5)
+function countTotalReviews(loc) {
+  if (!loc) return 0;
+  if (Array.isArray(loc.reviews)) {
+    let count = 0;
+    loc.reviews.forEach(r => {
+      count += 1;
+      if (Array.isArray(r.replies)) {
+        r.replies.forEach(rep2 => {
+          count += 1;
+          if (Array.isArray(rep2.replies)) {
+            count += rep2.replies.length;
+          }
+        });
+      }
+    });
+    return count;
+  }
+  return loc.total_reviews || 0;
+}
+
 function renderReviewsList(reviews) {
   const container = document.getElementById('modalReviewsList');
   const badge = document.getElementById('reviewsCountBadge');
   if (!container) return;
 
-  if (badge) badge.textContent = `${reviews.length} đánh giá`;
+  const totalComments = countTotalReviews({ reviews });
+  if (badge) badge.textContent = `${totalComments} bình luận`;
 
   if (reviews.length === 0) {
-    container.innerHTML = '<div class="p-6 text-center text-xs text-slate-400 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">Chưa có đánh giá nào. Hãy là người đầu tiên chia sẻ cảm nhận!</div>';
+    container.innerHTML = '<div class="p-6 text-center text-xs text-slate-400 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">Chưa có bình luận nào. Hãy là người đầu tiên chia sẻ cảm nhận!</div>';
     return;
   }
 

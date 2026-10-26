@@ -670,6 +670,26 @@ async function createNotification({ recipient_email, recipient_name, sender_name
   }
 }
 
+// Helper tính tổng tất cả bình luận (Đánh giá gốc Level 1 + Phản hồi Level 2 + Phản hồi con Level 3/4/5)
+function calculateTotalComments(location) {
+  if (!location) return 0;
+  let count = 0;
+  if (Array.isArray(location.reviews)) {
+    for (const rev of location.reviews) {
+      count += 1;
+      if (Array.isArray(rev.replies)) {
+        for (const rep of rev.replies) {
+          count += 1;
+          if (Array.isArray(rep.replies)) {
+            count += rep.replies.length;
+          }
+        }
+      }
+    }
+  }
+  return count;
+}
+
 // =====================================================================
 // 8. API ĐĂNG REVIEW MỚI (Thao tác nguyên tử $push & Aggregation, cho phép chỉ chấm sao không bắt buộc comment)
 // =====================================================================
@@ -727,15 +747,15 @@ app.post('/api/locations/:id/reviews', async (req, res) => {
     ]);
 
     let newAvg = loc.rating_avg;
-    let newTotal = loc.reviews.length;
     if (aggResult && aggResult.length > 0) {
       newAvg = parseFloat(aggResult[0].calculated_avg.toFixed(1));
-      newTotal = aggResult[0].calculated_total;
-      await Location.findByIdAndUpdate(loc._id, {
-        rating_avg: newAvg,
-        total_reviews: newTotal
-      });
     }
+    const freshLoc = await Location.findById(loc._id);
+    const newTotal = calculateTotalComments(freshLoc);
+    await Location.findByIdAndUpdate(loc._id, {
+      rating_avg: newAvg,
+      total_reviews: newTotal
+    });
 
     // 3. Tự động tạo Thông báo cho tác giả bài viết nếu người đánh giá khác tác giả
     if (loc.author_email && (!user_email || loc.author_email.toLowerCase() !== user_email.toLowerCase())) {
@@ -827,6 +847,7 @@ app.post('/api/locations/:id/reviews/:reviewId/replies', async (req, res) => {
       review.replies.push(newReply);
     }
 
+    loc.total_reviews = calculateTotalComments(loc);
     await loc.save();
 
     // 1. Thông báo cho tác giả bài viết
@@ -922,6 +943,7 @@ app.post('/api/locations/:id/reviews/:reviewId/like', async (req, res) => {
     }
 
     review.likes_count = review.liked_by.length;
+    loc.total_reviews = calculateTotalComments(loc);
     await loc.save();
 
     res.json({
@@ -1004,6 +1026,7 @@ app.post('/api/locations/:id/reviews/:reviewId/replies/:replyId/like', async (re
     }
 
     reply.likes_count = reply.liked_by.length;
+    loc.total_reviews = calculateTotalComments(loc);
     await loc.save();
 
     res.json({
