@@ -34,16 +34,6 @@ let authMode = 'login';
 // Người dùng hiện tại (Lấy từ LocalStorage session)
 let currentUser = localStorage.getItem('foodtravel_user') ? JSON.parse(localStorage.getItem('foodtravel_user')) : null;
 
-// Hàm điền nhanh tài khoản demo khi kiểm thử / chấm đồ án
-function quickFillAuth(email, password, name = '') {
-  const emailInput = document.getElementById('authUserEmail');
-  const passInput = document.getElementById('authPassword');
-  const nameInput = document.getElementById('authUserName');
-  if (emailInput) emailInput.value = email;
-  if (passInput) passInput.value = password;
-  if (name && nameInput) nameInput.value = name;
-}
-
 // Kiểm tra xem địa điểm có nằm trong danh sách đã lưu của người dùng hay không
 function isLocationSaved(locId) {
   if (!currentUser || !currentUser.saved_locations || !locId) return false;
