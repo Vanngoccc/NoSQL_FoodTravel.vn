@@ -31,19 +31,17 @@ const itemsPerPage = 12;
 // Trạng thái modal Auth (login hoặc register)
 let authMode = 'login';
 
-// Người dùng hiện tại (Lấy từ MongoDB session)
+// Người dùng hiện tại (Lấy từ LocalStorage session)
 let currentUser = localStorage.getItem('foodtravel_user') ? JSON.parse(localStorage.getItem('foodtravel_user')) : null;
 
-// Nếu chưa có, tự động kết nối tài khoản mặc định của bạn (Huỳnh Văn Ngọc) trong MongoDB
-if (!currentUser) {
-  currentUser = {
-    name: 'Huỳnh Văn Ngọc',
-    email: 'vanngoc@foodtravel.vn',
-    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
-    bio: 'Trưởng nhóm đồ án NoSQL Đề tài 04 - Đam mê khám phá ẩm thực ba miền và du lịch phượt.',
-    saved_locations: []
-  };
-  localStorage.setItem('foodtravel_user', JSON.stringify(currentUser));
+// Hàm điền nhanh tài khoản demo khi kiểm thử / chấm đồ án
+function quickFillAuth(email, password, name = '') {
+  const emailInput = document.getElementById('authUserEmail');
+  const passInput = document.getElementById('authPassword');
+  const nameInput = document.getElementById('authUserName');
+  if (emailInput) emailInput.value = email;
+  if (passInput) passInput.value = password;
+  if (name && nameInput) nameInput.value = name;
 }
 
 // Kiểm tra xem địa điểm có nằm trong danh sách đã lưu của người dùng hay không
@@ -98,6 +96,14 @@ document.addEventListener('DOMContentLoaded', () => {
   fetchLocations();
   fetchSidebarTopRated();
   initStarRatingComponent();
+
+  // Bắt buộc đăng nhập/đăng ký nếu chưa có tài khoản đăng nhập
+  if (!currentUser) {
+    setTimeout(() => {
+      openAuthModal('login');
+    }, 400);
+  }
+
   // Tự động kiểm tra thông báo mới định kỳ
   setInterval(() => {
     if (currentUser && currentUser.email) loadNotifications();
@@ -2631,6 +2637,10 @@ function toggleInlineReply(reviewId, targetUser = '') {
 }
 
 async function submitInlineReply(reviewId) {
+  if (!currentUser) {
+    openAuthModal('login');
+    return;
+  }
   if (!activeLocationId) return;
   const input = document.getElementById(`inlineReplyInput_${reviewId}`);
   if (!input) return;
@@ -2678,6 +2688,10 @@ async function submitInlineReply(reviewId) {
 
 // 12. GỬI ĐÁNH GIÁ MỚI
 async function submitReview() {
+  if (!currentUser) {
+    openAuthModal('login');
+    return;
+  }
   if (!activeLocationId) return;
 
   const userName = currentUser ? currentUser.name : 'Khách trải nghiệm';
@@ -2732,6 +2746,10 @@ async function submitReview() {
 // 14. CHIA SẺ BÀI VIẾT / ĐỊA ĐIỂM KÈM HÌNH ẢNH THỰC TẾ
 // =====================================================================
 function openNewLocationModal() {
+  if (!currentUser) {
+    openAuthModal('login');
+    return;
+  }
   document.getElementById('newLocationModal').classList.remove('hidden');
   // Tự động hỏi quyền GPS từ trình duyệt và lấy đúng vị trí thực tế của người dùng
   requestLocationAccessForNewPost();
@@ -3680,6 +3698,10 @@ function formatMessageTime(dateStr) {
 // =====================================================================
 
 function openCreateStoryModal() {
+  if (!currentUser) {
+    openAuthModal('login');
+    return;
+  }
   const modal = document.getElementById('createStoryModal');
   if (!modal) return;
 
