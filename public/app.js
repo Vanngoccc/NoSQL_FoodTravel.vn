@@ -2480,14 +2480,44 @@ function formatTimeAgoVi(dateInput) {
   return date.toLocaleDateString('vi-VN');
 }
 
-function formatFacebookMention(text) {
+function formatFacebookMention(text, replyTo = '', allThreadNames = []) {
   if (!text) return '';
-  const safe = String(text)
+  let safe = String(text)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
-  // Bỏ dấu @ và tô màu xanh Facebook đậm chuẩn y hệt FB
-  return safe.replace(/@([^\s,:]+(?:\s+[^\s,:]+)?)/g, '<span class="text-[#1877F2] font-bold cursor-pointer hover:underline" onclick="openUserProfile(\'$1\', \'\', event)">$1</span>');
+
+  // Gom các tên ứng viên xuất hiện trong luồng bình luận này (ưu tiên tên dài nhất trước)
+  const candidateNames = [];
+  if (replyTo && replyTo.trim()) candidateNames.push(replyTo.trim());
+  if (Array.isArray(allThreadNames)) {
+    allThreadNames.forEach(n => {
+      if (n && n.trim() && !candidateNames.some(c => c.toLowerCase() === n.trim().toLowerCase())) {
+        candidateNames.push(n.trim());
+      }
+    });
+  }
+  // Sắp xếp tên dài lên trước để không bị cắt bớt họ tên tiếng Việt (ví dụ Huỳnh Văn Ngọc không bị cắt thành Huỳnh Văn)
+  candidateNames.sort((a, b) => b.length - a.length);
+
+  // 1. Kiểm tra khớp tên cụ thể (có hoặc không có dấu @)
+  for (const name of candidateNames) {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(^|\\s)@?${escaped}(?::|\\s+|$)`, 'i');
+    if (regex.test(safe)) {
+      safe = safe.replace(regex, `$1<span class="text-[#1877F2] font-bold cursor-pointer hover:underline" onclick="openUserProfile('${name.replace(/'/g, "\\'")}', '', event)">${name}</span> `);
+      return safe;
+    }
+  }
+
+  // 2. Fallback: Nếu gõ @Tên người lạ chưa có trong thread (hỗ trợ tên tiếng Việt dài đến 5 từ)
+  safe = safe.replace(/@([A-ZÀ-Ỹa-zà-ỹ0-9_'\s]{2,40}?)(?::|\s{2,}|(?=\s+[a-zà-ỹ])|$)/g, (match, p1) => {
+    const clean = p1.trim();
+    if (!clean) return match;
+    return `<span class="text-[#1877F2] font-bold cursor-pointer hover:underline" onclick="openUserProfile('${clean.replace(/'/g, "\\'")}', '', event)">${clean}</span> `;
+  });
+
+  return safe;
 }
 
 function toggleCommentLike(btnEl) {
@@ -2527,6 +2557,9 @@ function renderReviewsList(reviews) {
       (activeLocationData.author_email && rev.email && activeLocationData.author_email.toLowerCase() === rev.email.toLowerCase())
     );
 
+    // Gom tất cả tên xuất hiện trong thread để bắt tag mention chính xác 100%
+    const allThreadNames = [rev.user_name, ...(rev.replies || []).map(r => r.user_name)].filter(Boolean);
+
     // Tổ chức danh sách phản hồi thành cấu trúc cây 3 tầng (Level 2 & Level 3 chuẩn Facebook)
     const level2Replies = [];
     const level3ByParent = new Map();
@@ -2535,7 +2568,7 @@ function renderReviewsList(reviews) {
       let pId = rep.parent_reply_id || '';
       if (!pId && rep.content) {
         // Tự động nhận diện nếu rep trả lời 1 người trong thread
-        const mention = rep.content.match(/^@([^\s,:]+(?:\s+[^\s,:]+)?)/);
+        const mention = rep.content.match(/^@?([^\s,:]+(?:\s+[^\s,:]+)?)/);
         if (mention) {
           const matchName = mention[1].trim().toLowerCase();
           const parentRep = (rev.replies || []).find(p => p !== rep && p.user_name && p.user_name.toLowerCase() === matchName);
@@ -2553,9 +2586,9 @@ function renderReviewsList(reviews) {
       }
     });
 
-    // Render Level 2 & Level 3
+    // Render Level 2 & Level 3 với đường nối chữ L chuẩn xác 100% không bị hở
     const repliesLevel2Html = level2Replies.length > 0 ? `
-      <div class="relative mt-2.5 ml-4 sm:ml-6 pl-4 sm:pl-5 border-l-2 border-slate-200 space-y-3.5">
+      <div class="relative mt-2.5 ml-3 sm:ml-4 pl-6 border-l-2 border-slate-300 space-y-3.5">
         ${level2Replies.map(rep2 => {
           const rep2Id = rep2._id ? rep2._id.toString() : rep2.user_name;
           const rep2Avatar = getConsistentAvatar(rep2.user_name, rep2.avatar);
@@ -2565,14 +2598,14 @@ function renderReviewsList(reviews) {
 
           // Render Level 3 lồng sâu thêm 1 cấp (với đường cong L nhánh phụ chuẩn FB)
           const repliesLevel3Html = childReplies.length > 0 ? `
-            <div class="relative mt-2.5 ml-3 sm:ml-5 pl-4 sm:pl-5 border-l-2 border-slate-200 space-y-3">
+            <div class="relative mt-2.5 ml-3 sm:ml-4 pl-6 border-l-2 border-slate-300 space-y-3">
               ${childReplies.map(rep3 => {
                 const rep3Avatar = getConsistentAvatar(rep3.user_name, rep3.avatar);
                 const isRep3Author = activeLocationData && activeLocationData.author_name && (activeLocationData.author_name.toLowerCase() === rep3.user_name.toLowerCase());
                 return `
                   <div class="relative flex items-start space-x-2.5 group">
-                    <!-- Đường cong móc chữ L Level 3 (như ảnh của bạn) -->
-                    <div class="absolute -left-4 sm:-left-5 top-3.5 w-3 sm:w-4 h-3.5 border-b-2 border-slate-200 rounded-bl-xl pointer-events-none"></div>
+                    <!-- Đường cong móc chữ L Level 3 khớp khít với trục dọc -->
+                    <div class="absolute -left-[24px] top-0 w-[22px] h-3.5 border-b-2 border-slate-300 rounded-bl-xl pointer-events-none"></div>
 
                     <img src="${rep3Avatar}" onclick="openUserProfile('${rep3.user_name.replace(/'/g, "\\'")}', '', event)" class="w-7 h-7 rounded-full object-cover shrink-0 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all border border-slate-200">
                     <div class="flex-1 min-w-0">
@@ -2581,7 +2614,7 @@ function renderReviewsList(reviews) {
                         ${isRep3Author ? '<span class="text-[8px] px-1 py-0.2 bg-orange-100 text-[#FF5422] font-bold rounded-full">Tác giả</span>' : ''}
                         <span class="text-slate-400 text-[11px]">· ${formatTimeAgoVi(rep3.created_at)}</span>
                       </div>
-                      <p class="text-slate-800 text-xs leading-relaxed mt-0.5 break-words">${formatFacebookMention(rep3.content)}</p>
+                      <p class="text-slate-800 text-xs leading-relaxed mt-0.5 break-words">${formatFacebookMention(rep3.content, rep3.reply_to, allThreadNames)}</p>
 
                       <!-- Action bar Level 3 -->
                       <div class="flex items-center space-x-3 text-[11px] font-semibold text-slate-500 mt-1">
@@ -2600,8 +2633,8 @@ function renderReviewsList(reviews) {
 
           return `
             <div class="relative flex items-start space-x-2.5 group">
-              <!-- Đường cong móc chữ L Level 2 -->
-              <div class="absolute -left-4 sm:-left-5 top-3.5 w-3 sm:w-4 h-3.5 border-b-2 border-slate-200 rounded-bl-xl pointer-events-none"></div>
+              <!-- Đường cong móc chữ L Level 2 khớp khít với trục dọc -->
+              <div class="absolute -left-[24px] top-0 w-[22px] h-4 border-b-2 border-slate-300 rounded-bl-xl pointer-events-none"></div>
 
               <img src="${rep2Avatar}" onclick="openUserProfile('${rep2.user_name.replace(/'/g, "\\'")}', '', event)" class="w-8 h-8 rounded-full object-cover shrink-0 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all border border-slate-200">
               <div class="flex-1 min-w-0">
@@ -2610,7 +2643,7 @@ function renderReviewsList(reviews) {
                   ${isRep2Author ? '<span class="text-[8px] px-1 py-0.2 bg-orange-100 text-[#FF5422] font-bold rounded-full">Tác giả</span>' : ''}
                   <span class="text-slate-400 text-[11px]">· ${formatTimeAgoVi(rep2.created_at)}</span>
                 </div>
-                <p class="text-slate-800 text-xs sm:text-[13px] leading-relaxed mt-0.5 break-words">${formatFacebookMention(rep2.content)}</p>
+                <p class="text-slate-800 text-xs sm:text-[13px] leading-relaxed mt-0.5 break-words">${formatFacebookMention(rep2.content, rep2.reply_to, allThreadNames)}</p>
 
                 <!-- Action bar Level 2 -->
                 <div class="flex items-center space-x-3 text-[11px] font-semibold text-slate-500 mt-1">
@@ -2625,8 +2658,8 @@ function renderReviewsList(reviews) {
                 ${repliesLevel3Html}
 
                 <!-- Khung nhập phản hồi con cho Level 2 -->
-                <div id="replyBox_${rev._id}_${rep2Id}" class="hidden relative mt-2.5 ml-3 sm:ml-5 pl-4 sm:pl-5 border-l-2 border-slate-200">
-                  <div class="absolute -left-4 sm:-left-5 top-3.5 w-3.5 h-3 border-b-2 border-slate-200 rounded-bl-xl pointer-events-none"></div>
+                <div id="replyBox_${rev._id}_${rep2Id}" class="hidden relative mt-2.5 ml-3 sm:ml-4 pl-6 border-l-2 border-slate-300">
+                  <div class="absolute -left-[24px] top-0 w-[22px] h-4 border-b-2 border-slate-300 rounded-bl-xl pointer-events-none"></div>
                   <div class="flex items-center space-x-2 bg-slate-100 border border-slate-200 rounded-2xl p-1.5 pr-2 focus-within:bg-white focus-within:border-[#1877F2] focus-within:ring-2 focus-within:ring-[#1877F2]/20 transition-all shadow-xs">
                     <img src="${currentUserAvatar}" class="w-6 h-6 rounded-full object-cover shrink-0">
                     <input type="text" id="inlineReplyInput_${rev._id}_${rep2Id}" placeholder="Viết phản hồi cho ${rep2.user_name}..." class="flex-1 bg-transparent text-xs text-slate-800 placeholder-slate-400 outline-none px-1" onkeydown="if(event.key==='Enter') submitInlineReply('${rev._id}', '${rep2Id}', '${rep2.user_name}')">
@@ -2657,7 +2690,7 @@ function renderReviewsList(reviews) {
                 <i class="fa-solid fa-star text-[9px]"></i>
               </div>
             </div>
-            <p class="text-xs sm:text-[13px] text-slate-800 leading-relaxed mt-0.5 break-words">${formatFacebookMention(rev.content)}</p>
+            <p class="text-xs sm:text-[13px] text-slate-800 leading-relaxed mt-0.5 break-words">${formatFacebookMention(rev.content, '', allThreadNames)}</p>
 
             <!-- Hàng thao tác Level 1 -->
             <div class="flex items-center space-x-4 text-xs font-semibold text-slate-500 mt-1">
@@ -2672,8 +2705,8 @@ function renderReviewsList(reviews) {
             ${repliesLevel2Html}
 
             <!-- Khung nhập phản hồi trực tiếp cho Level 1 -->
-            <div id="replyBox_${rev._id}" class="hidden relative mt-2.5 ml-4 sm:ml-6 pl-4 sm:pl-5 border-l-2 border-slate-200">
-              <div class="absolute -left-4 sm:-left-5 top-3.5 w-3.5 h-3 border-b-2 border-slate-200 rounded-bl-xl pointer-events-none"></div>
+            <div id="replyBox_${rev._id}" class="hidden relative mt-2.5 ml-3 sm:ml-4 pl-6 border-l-2 border-slate-300">
+              <div class="absolute -left-[24px] top-0 w-[22px] h-4 border-b-2 border-slate-300 rounded-bl-xl pointer-events-none"></div>
               <div class="flex items-center space-x-2 bg-slate-100 border border-slate-200 rounded-2xl p-1.5 pr-2 focus-within:bg-white focus-within:border-[#1877F2] focus-within:ring-2 focus-within:ring-[#1877F2]/20 transition-all shadow-xs">
                 <img src="${currentUserAvatar}" class="w-6 h-6 rounded-full object-cover shrink-0">
                 <input type="text" id="inlineReplyInput_${rev._id}" placeholder="Viết phản hồi cho ${rev.user_name}..." class="flex-1 bg-transparent text-xs text-slate-800 placeholder-slate-400 outline-none px-1" onkeydown="if(event.key==='Enter') submitInlineReply('${rev._id}', '', '${rev.user_name}')">
