@@ -520,7 +520,7 @@ app.get('/api/analytics/top-cities', async (req, res) => {
   }
 });
 
-app.get('/api/analytics/top-rated', async (req, res) => {
+app.get(['/api/analytics/top-rated', '/api/locations/top-rated'], async (req, res) => {
   try {
     const topRated = await Location.aggregate([
       { $sort: { rating_avg: -1, total_reviews: -1 } },
