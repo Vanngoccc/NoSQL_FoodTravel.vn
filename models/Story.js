@@ -24,7 +24,8 @@ const storySchema = new mongoose.Schema({
   created_at: { type: Date, default: Date.now }
 }, { timestamps: true });
 
-// Tự động hết hạn và dọn dẹp sau 24 giờ (TTL Index chuẩn MongoDB)
+// Tự động hết hạn và dọn dẹp sau 24 giờ (TTL Index chuẩn MongoDB trên cả createdAt và created_at)
 storySchema.index({ createdAt: 1 }, { expireAfterSeconds: 86400 });
+storySchema.index({ created_at: 1 }, { expireAfterSeconds: 86400 });
 
 module.exports = mongoose.model('Story', storySchema, 'stories');

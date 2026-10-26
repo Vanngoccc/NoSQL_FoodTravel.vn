@@ -195,11 +195,30 @@ async function repairMissingStoryImages() {
   }
 }
 
+// Tự động dọn dẹp các Story quá 24h khỏi MongoDB
+async function cleanupExpiredStories() {
+  try {
+    const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const result = await Story.deleteMany({
+      $and: [
+        { $or: [{ createdAt: { $lt: cutoff24h } }, { createdAt: { $exists: false } }] },
+        { $or: [{ created_at: { $lt: cutoff24h } }, { created_at: { $exists: false } }] }
+      ]
+    });
+    if (result.deletedCount > 0) {
+      console.log(`🧹 Đã dọn dẹp ${result.deletedCount} story quá 24 giờ khỏi MongoDB`);
+    }
+  } catch (e) {
+    console.warn('Lỗi cleanupExpiredStories:', e.message);
+  }
+}
+
 // Kết nối MongoDB
 mongoose.connect(MONGO_URI)
   .then(() => {
     console.log('✅ Kết nối MongoDB thành công: ' + MONGO_URI);
     syncAuthorAvatars();
+    cleanupExpiredStories();
     repairMissingStoryImages();
   })
   .catch(err => console.error('❌ Lỗi kết nối MongoDB:', err));
@@ -1208,10 +1227,20 @@ app.post('/api/auth/save-location/:id', async (req, res) => {
 // 12. API STORIES PHONG CÁCH MẠNG XÃ HỘI (LƯU TRỮ TRỰC TIẾP TRÊN MONGODB - 24H)
 // =====================================================================
 
-// Lấy danh sách Story trong vòng 24 giờ qua (Luôn đồng bộ avatar mới nhất từ User Profile)
+// Lấy danh sách Story trong vòng 24 giờ qua (Đảm bảo Story quá 24h bị xóa hoàn toàn khỏi MongoDB)
 app.get('/api/stories', async (req, res) => {
   try {
     const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    // 1. Tự động xóa vĩnh viễn toàn bộ các Story đã quá 24 giờ khỏi MongoDB
+    await Story.deleteMany({
+      $and: [
+        { $or: [{ createdAt: { $lt: cutoff24h } }, { createdAt: { $exists: false } }] },
+        { $or: [{ created_at: { $lt: cutoff24h } }, { created_at: { $exists: false } }] }
+      ]
+    });
+
+    // 2. Chỉ truy vấn các Story còn trong vòng 24 giờ
     const timeFilter = {
       $or: [
         { createdAt: { $gte: cutoff24h } },
@@ -1223,20 +1252,6 @@ app.get('/api/stories', async (req, res) => {
       .sort({ createdAt: -1, created_at: -1 })
       .limit(30)
       .lean();
-
-    // Nếu toàn bộ story đã quá 24h, tự động kích hoạt 3 story mẫu gần nhất sang thời gian hiện tại
-    if (stories.length === 0) {
-      const pastStories = await Story.find().sort({ created_at: -1, createdAt: -1 }).limit(3);
-      for (const s of pastStories) {
-        s.createdAt = new Date();
-        s.created_at = new Date();
-        await s.save();
-      }
-      stories = await Story.find(timeFilter)
-        .sort({ createdAt: -1, created_at: -1 })
-        .limit(30)
-        .lean();
-    }
 
     // Tự động đồng bộ ảnh đại diện mới nhất của tác giả từ bảng User
     const emails = [...new Set(stories.map(s => s.user_email).filter(Boolean))];
@@ -1270,6 +1285,7 @@ app.post('/api/stories', async (req, res) => {
       return res.status(400).json({ error: 'Vui lòng cung cấp đầy đủ hình ảnh và địa điểm check-in!' });
     }
 
+    const now = new Date();
     const newStory = new Story({
       user_name,
       user_avatar: user_avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
@@ -1281,7 +1297,9 @@ app.post('/api/stories', async (req, res) => {
       filter: filter || 'normal',
       music: music || 'Nhạc thịnh hành 🎵',
       likes_count: 1,
-      liked_by: user_email ? [user_email.toLowerCase().trim()] : []
+      liked_by: user_email ? [user_email.toLowerCase().trim()] : [],
+      created_at: now,
+      createdAt: now
     });
 
     const savedStory = await newStory.save();
