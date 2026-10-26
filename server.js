@@ -801,12 +801,17 @@ app.post('/api/locations/:id/reviews/:reviewId/replies', async (req, res) => {
     if (parent_reply_id) {
       targetParentReply = review.replies.id(parent_reply_id);
       if (!targetParentReply) {
+        // Tìm xem parent_reply_id có phải là ID của một reply con cấp 3/4/5 hay không
+        for (const r of (review.replies || [])) {
+          if (r.replies && r.replies.id && r.replies.id(parent_reply_id)) {
+            targetParentReply = r;
+            break;
+          }
+        }
+      }
+      if (!targetParentReply) {
         targetParentReply = (review.replies || []).find(r => r.user_name && r.user_name.toLowerCase() === parent_reply_id.toLowerCase());
       }
-    }
-
-    if (!targetParentReply && reply_to) {
-      targetParentReply = (review.replies || []).find(r => r.user_name && r.user_name.toLowerCase() === reply_to.toLowerCase());
     }
 
     if (targetParentReply) {

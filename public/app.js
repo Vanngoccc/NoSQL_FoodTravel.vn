@@ -2679,6 +2679,9 @@ function renderReviewsList(reviews) {
       }
     });
 
+    // Sắp xếp các phản hồi Level 2 theo thời gian tăng dần (cũ ở trên -> mới ở dưới cùng)
+    level2Replies.sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
+
     // Render Level 2 & Level 3 với đường nối chữ L chuẩn xác 100% không bị hở
     const repliesLevel2Html = level2Replies.length > 0 ? `
       <div class="relative mt-2.5 ml-3 sm:ml-4 pl-6 border-l-2 border-slate-300 space-y-3.5">
@@ -2690,11 +2693,25 @@ function renderReviewsList(reviews) {
           const rep2LikesCount = rep2.likes_count || (rep2.liked_by ? rep2.liked_by.length : 0);
           
           // Lấy các replies con lồng trực tiếp bên trong rep2.replies HOẶC qua map parent_reply_id
-          const childReplies = [
+          const rawChildReplies = [
             ...(Array.isArray(rep2.replies) ? rep2.replies : []),
             ...(level3ByParent.get(rep2Id) || []),
             ...(level3ByParent.get(rep2.user_name) || [])
           ];
+
+          // Lọc trùng ID
+          const seenIds = new Set();
+          const childReplies = [];
+          for (const cr of rawChildReplies) {
+            const idKey = cr._id ? cr._id.toString() : (cr.user_name + '_' + (cr.created_at || ''));
+            if (!seenIds.has(idKey)) {
+              seenIds.add(idKey);
+              childReplies.push(cr);
+            }
+          }
+
+          // Luôn sắp xếp theo thứ tự thời gian tăng dần: Cũ ở trên -> Mới ở DƯỚI CÙNG (chuẩn mạng xã hội 100%)
+          childReplies.sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
 
           // Render Level 3 lồng sâu thêm 1 cấp (với đường cong L nhánh phụ chuẩn FB)
           const repliesLevel3Html = childReplies.length > 0 ? `
