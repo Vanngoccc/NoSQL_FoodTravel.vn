@@ -2520,17 +2520,88 @@ function formatFacebookMention(text, replyTo = '', allThreadNames = []) {
   return safe;
 }
 
-function toggleCommentLike(btnEl) {
-  btnEl.classList.toggle('text-[#1877F2]');
-  btnEl.classList.toggle('font-bold');
-  const span = btnEl.querySelector('span');
+async function toggleCommentLike(type, locId, reviewId, btnEl, replyId = '') {
+  if (!currentUser || (!currentUser.email && !currentUser.name)) {
+    showToast('Vui lòng đăng nhập để thích bình luận!', 'info');
+    if (typeof openAuthModal === 'function') openAuthModal('login');
+    return;
+  }
+
+  if (btnEl.dataset.loading === 'true') return;
+  btnEl.dataset.loading = 'true';
+
+  const span = btnEl.querySelector('.like-text') || btnEl.querySelector('span');
   const icon = btnEl.querySelector('i');
-  if (btnEl.classList.contains('text-[#1877F2]')) {
-    if (icon) icon.className = 'fa-solid fa-thumbs-up text-xs text-[#1877F2]';
-    if (span) span.textContent = 'Đã thích';
-  } else {
-    if (icon) icon.className = 'fa-regular fa-thumbs-up text-xs';
-    if (span) span.textContent = 'Thích';
+  const parentRow = btnEl.parentElement;
+  const countBadge = parentRow ? parentRow.querySelector('.comment-like-badge') : null;
+
+  try {
+    const url = type === 'review'
+      ? `/api/locations/${locId}/reviews/${reviewId}/like`
+      : `/api/locations/${locId}/reviews/${reviewId}/replies/${replyId}/like`;
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_name: currentUser.name,
+        user_email: currentUser.email,
+        user_avatar: currentUser.avatar
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error || 'Lỗi thao tác thích', 'error');
+      return;
+    }
+
+    const isLiked = data.is_liked;
+    const likesCount = data.likes_count || 0;
+
+    if (isLiked) {
+      btnEl.classList.add('text-[#1877F2]', 'font-bold');
+      btnEl.classList.remove('text-slate-500');
+      if (icon) icon.className = (type === 'review' ? 'fa-solid fa-thumbs-up text-xs text-[#1877F2]' : 'fa-solid fa-thumbs-up text-[10px] text-[#1877F2]');
+      if (span) span.textContent = 'Đã thích';
+    } else {
+      btnEl.classList.remove('text-[#1877F2]', 'font-bold');
+      btnEl.classList.add('text-slate-500');
+      if (icon) icon.className = (type === 'review' ? 'fa-regular fa-thumbs-up text-xs' : 'fa-regular fa-thumbs-up text-[10px]');
+      if (span) span.textContent = 'Thích';
+    }
+
+    if (countBadge) {
+      if (likesCount > 0) {
+        countBadge.classList.remove('hidden');
+        countBadge.innerHTML = `<i class="fa-solid fa-thumbs-up text-[9px] text-[#1877F2]"></i><span class="text-slate-600 font-semibold">${likesCount}</span>`;
+      } else {
+        countBadge.classList.add('hidden');
+        countBadge.innerHTML = '';
+      }
+    }
+
+    // Đồng bộ lại vào bộ nhớ activeLocationData
+    if (activeLocationData && activeLocationData.reviews) {
+      const revObj = activeLocationData.reviews.find(r => (r._id ? r._id.toString() : '') === reviewId);
+      if (revObj) {
+        if (type === 'review') {
+          revObj.likes_count = likesCount;
+          revObj.liked_by = data.liked_by;
+        } else if (revObj.replies) {
+          const repObj = revObj.replies.find(r => (r._id ? r._id.toString() : '') === replyId);
+          if (repObj) {
+            repObj.likes_count = likesCount;
+            repObj.liked_by = data.liked_by;
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Lỗi khi like bình luận:', err);
+    showToast('Lỗi kết nối máy chủ', 'error');
+  } finally {
+    btnEl.dataset.loading = 'false';
   }
 }
 
@@ -2550,12 +2621,26 @@ function renderReviewsList(reviews) {
     ? getConsistentAvatar(currentUser.name, currentUser.avatar)
     : getConsistentAvatar('Khách');
 
+  const locId = (activeLocationData && activeLocationData._id) ? activeLocationData._id : '';
+  const myEmail = (currentUser && currentUser.email) ? currentUser.email.toLowerCase() : '';
+  const myName = (currentUser && currentUser.name) ? currentUser.name.toLowerCase() : '';
+  const isLikedByMe = (likedByList) => {
+    if (!Array.isArray(likedByList) || (!myEmail && !myName)) return false;
+    return likedByList.some(k => {
+      const lower = (k || '').toLowerCase();
+      return (myEmail && lower === myEmail) || (myName && lower === myName);
+    });
+  };
+
   container.innerHTML = reviews.map(rev => {
     const revAvatar = getConsistentAvatar(rev.user_name, rev.avatar);
     const isAuthor = activeLocationData && (
       (activeLocationData.author_name && rev.user_name && activeLocationData.author_name.toLowerCase() === rev.user_name.toLowerCase()) ||
       (activeLocationData.author_email && rev.email && activeLocationData.author_email.toLowerCase() === rev.email.toLowerCase())
     );
+
+    const isRevLiked = isLikedByMe(rev.liked_by);
+    const revLikesCount = rev.likes_count || (rev.liked_by ? rev.liked_by.length : 0);
 
     // Gom tất cả tên xuất hiện trong thread để bắt tag mention chính xác 100%
     const allThreadNames = [rev.user_name, ...(rev.replies || []).map(r => r.user_name)].filter(Boolean);
@@ -2593,6 +2678,8 @@ function renderReviewsList(reviews) {
           const rep2Id = rep2._id ? rep2._id.toString() : rep2.user_name;
           const rep2Avatar = getConsistentAvatar(rep2.user_name, rep2.avatar);
           const isRep2Author = activeLocationData && activeLocationData.author_name && (activeLocationData.author_name.toLowerCase() === rep2.user_name.toLowerCase());
+          const isRep2Liked = isLikedByMe(rep2.liked_by);
+          const rep2LikesCount = rep2.likes_count || (rep2.liked_by ? rep2.liked_by.length : 0);
           
           const childReplies = level3ByParent.get(rep2Id) || level3ByParent.get(rep2.user_name) || [];
 
@@ -2602,6 +2689,8 @@ function renderReviewsList(reviews) {
               ${childReplies.map(rep3 => {
                 const rep3Avatar = getConsistentAvatar(rep3.user_name, rep3.avatar);
                 const isRep3Author = activeLocationData && activeLocationData.author_name && (activeLocationData.author_name.toLowerCase() === rep3.user_name.toLowerCase());
+                const isRep3Liked = isLikedByMe(rep3.liked_by);
+                const rep3LikesCount = rep3.likes_count || (rep3.liked_by ? rep3.liked_by.length : 0);
                 return `
                   <div class="relative flex items-start space-x-2.5 group">
                     <!-- Đường cong móc chữ L Level 3 khớp khít với trục dọc -->
@@ -2618,11 +2707,13 @@ function renderReviewsList(reviews) {
 
                       <!-- Action bar Level 3 -->
                       <div class="flex items-center space-x-3 text-[11px] font-semibold text-slate-500 mt-1">
-                        <button onclick="toggleCommentLike(this)" class="hover:underline flex items-center space-x-1 cursor-pointer">
-                          <i class="fa-regular fa-thumbs-up text-[10px]"></i> <span>Thích</span>
+                        <button onclick="toggleCommentLike('reply', '${locId}', '${rev._id}', this, '${rep3._id || ''}')" class="hover:underline flex items-center space-x-1 cursor-pointer transition-colors ${isRep3Liked ? 'text-[#1877F2] font-bold' : 'text-slate-500'}">
+                          <i class="${isRep3Liked ? 'fa-solid fa-thumbs-up text-[10px] text-[#1877F2]' : 'fa-regular fa-thumbs-up text-[10px]'}"></i> <span class="like-text">${isRep3Liked ? 'Đã thích' : 'Thích'}</span>
                         </button>
                         <button onclick="toggleInlineReply('${rev._id}', '${rep3.user_name.replace(/'/g, "\\'")}', '${rep2Id}')" class="hover:underline cursor-pointer">Trả lời</button>
-                        <button class="hover:underline cursor-pointer">Chia sẻ</button>
+                        <span class="comment-like-badge ${rep3LikesCount > 0 ? '' : 'hidden'} inline-flex items-center space-x-1 bg-slate-100 hover:bg-slate-200/70 px-1.5 py-0.5 rounded-full cursor-pointer shadow-2xs">
+                          <i class="fa-solid fa-thumbs-up text-[9px] text-[#1877F2]"></i><span class="text-slate-600 text-[11px] font-semibold">${rep3LikesCount}</span>
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -2647,11 +2738,13 @@ function renderReviewsList(reviews) {
 
                 <!-- Action bar Level 2 -->
                 <div class="flex items-center space-x-3 text-[11px] font-semibold text-slate-500 mt-1">
-                  <button onclick="toggleCommentLike(this)" class="hover:underline flex items-center space-x-1 cursor-pointer">
-                    <i class="fa-regular fa-thumbs-up text-xs"></i> <span>Thích</span>
+                  <button onclick="toggleCommentLike('reply', '${locId}', '${rev._id}', this, '${rep2._id || ''}')" class="hover:underline flex items-center space-x-1 cursor-pointer transition-colors ${isRep2Liked ? 'text-[#1877F2] font-bold' : 'text-slate-500'}">
+                    <i class="${isRep2Liked ? 'fa-solid fa-thumbs-up text-xs text-[#1877F2]' : 'fa-regular fa-thumbs-up text-xs'}"></i> <span class="like-text">${isRep2Liked ? 'Đã thích' : 'Thích'}</span>
                   </button>
                   <button onclick="toggleInlineReply('${rev._id}', '${rep2.user_name.replace(/'/g, "\\'")}', '${rep2Id}')" class="hover:underline cursor-pointer">Trả lời</button>
-                  <button class="hover:underline cursor-pointer">Chia sẻ</button>
+                  <span class="comment-like-badge ${rep2LikesCount > 0 ? '' : 'hidden'} inline-flex items-center space-x-1 bg-slate-100 hover:bg-slate-200/70 px-1.5 py-0.5 rounded-full cursor-pointer shadow-2xs">
+                    <i class="fa-solid fa-thumbs-up text-[9px] text-[#1877F2]"></i><span class="text-slate-600 text-[11px] font-semibold">${rep2LikesCount}</span>
+                  </span>
                 </div>
 
                 <!-- Level 3 lồng nhánh cây bên trong Level 2 -->
@@ -2694,11 +2787,13 @@ function renderReviewsList(reviews) {
 
             <!-- Hàng thao tác Level 1 -->
             <div class="flex items-center space-x-4 text-xs font-semibold text-slate-500 mt-1">
-              <button onclick="toggleCommentLike(this)" class="hover:underline flex items-center space-x-1 cursor-pointer">
-                <i class="fa-regular fa-thumbs-up text-xs"></i> <span>Thích</span>
+              <button onclick="toggleCommentLike('review', '${locId}', '${rev._id}', this)" class="hover:underline flex items-center space-x-1 cursor-pointer transition-colors ${isRevLiked ? 'text-[#1877F2] font-bold' : 'text-slate-500'}">
+                <i class="${isRevLiked ? 'fa-solid fa-thumbs-up text-xs text-[#1877F2]' : 'fa-regular fa-thumbs-up text-xs'}"></i> <span class="like-text">${isRevLiked ? 'Đã thích' : 'Thích'}</span>
               </button>
               <button onclick="toggleInlineReply('${rev._id}', '${rev.user_name.replace(/'/g, "\\'")}')" class="hover:underline cursor-pointer">Trả lời</button>
-              <button class="hover:underline cursor-pointer">Chia sẻ</button>
+              <span class="comment-like-badge ${revLikesCount > 0 ? '' : 'hidden'} inline-flex items-center space-x-1 bg-slate-100 hover:bg-slate-200/70 px-1.5 py-0.5 rounded-full cursor-pointer shadow-2xs">
+                <i class="fa-solid fa-thumbs-up text-[10px] text-[#1877F2]"></i><span class="text-slate-600 text-xs font-semibold">${revLikesCount}</span>
+              </span>
             </div>
 
             <!-- Level 2 & Level 3 lồng nhau -->

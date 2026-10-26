@@ -839,6 +839,143 @@ app.post('/api/locations/:id/reviews/:reviewId/replies', async (req, res) => {
 });
 
 // =====================================================================
+// 9.1. API THẢ TIM / BỎ TIM BÌNH LUẬN (Review Like)
+// =====================================================================
+app.post('/api/locations/:id/reviews/:reviewId/like', async (req, res) => {
+  try {
+    const { id, reviewId } = req.params;
+    const { user_email, user_name, user_avatar } = req.body;
+    const userKey = (user_email || user_name || '').trim();
+
+    if (!userKey) {
+      return res.status(400).json({ error: 'Vui lòng đăng nhập để thích bình luận' });
+    }
+
+    const loc = await Location.findById(id);
+    if (!loc) return res.status(404).json({ error: 'Không tìm thấy địa điểm' });
+
+    const review = loc.reviews.id(reviewId);
+    if (!review) return res.status(404).json({ error: 'Không tìm thấy bình luận' });
+
+    if (!Array.isArray(review.liked_by)) review.liked_by = [];
+
+    const existingIdx = review.liked_by.findIndex(
+      k => k.toLowerCase() === userKey.toLowerCase()
+    );
+
+    let is_liked = false;
+    if (existingIdx !== -1) {
+      review.liked_by.splice(existingIdx, 1);
+      is_liked = false;
+    } else {
+      review.liked_by.push(userKey);
+      is_liked = true;
+
+      if (review.user_name && review.user_name.toLowerCase() !== (user_name || '').toLowerCase()) {
+        try {
+          const revOwner = await User.findOne({ name: new RegExp(`^${review.user_name}$`, 'i') });
+          if (revOwner && revOwner.email) {
+            await createNotification({
+              recipient_email: revOwner.email,
+              sender_name: user_name || 'Một thành viên',
+              sender_avatar: user_avatar,
+              type: 'like',
+              title: `${user_name || 'Một thành viên'} đã thích bình luận của bạn`,
+              content: review.content && review.content.length > 50 ? review.content.substring(0, 50) + '...' : (review.content || ''),
+              target_id: loc._id
+            });
+          }
+        } catch (notifErr) {
+          console.warn('Lỗi gửi thông báo like review:', notifErr.message);
+        }
+      }
+    }
+
+    review.likes_count = review.liked_by.length;
+    await loc.save();
+
+    res.json({
+      success: true,
+      is_liked,
+      likes_count: review.likes_count,
+      liked_by: review.liked_by
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Lỗi xử lý thích bình luận', details: err.message });
+  }
+});
+
+// =====================================================================
+// 9.2. API THẢ TIM / BỎ TIM PHẢN HỒI (Reply Like)
+// =====================================================================
+app.post('/api/locations/:id/reviews/:reviewId/replies/:replyId/like', async (req, res) => {
+  try {
+    const { id, reviewId, replyId } = req.params;
+    const { user_email, user_name, user_avatar } = req.body;
+    const userKey = (user_email || user_name || '').trim();
+
+    if (!userKey) {
+      return res.status(400).json({ error: 'Vui lòng đăng nhập để thích phản hồi' });
+    }
+
+    const loc = await Location.findById(id);
+    if (!loc) return res.status(404).json({ error: 'Không tìm thấy địa điểm' });
+
+    const review = loc.reviews.id(reviewId);
+    if (!review) return res.status(404).json({ error: 'Không tìm thấy bình luận' });
+
+    const reply = review.replies.id(replyId);
+    if (!reply) return res.status(404).json({ error: 'Không tìm thấy phản hồi' });
+
+    if (!Array.isArray(reply.liked_by)) reply.liked_by = [];
+
+    const existingIdx = reply.liked_by.findIndex(
+      k => k.toLowerCase() === userKey.toLowerCase()
+    );
+
+    let is_liked = false;
+    if (existingIdx !== -1) {
+      reply.liked_by.splice(existingIdx, 1);
+      is_liked = false;
+    } else {
+      reply.liked_by.push(userKey);
+      is_liked = true;
+
+      if (reply.user_name && reply.user_name.toLowerCase() !== (user_name || '').toLowerCase()) {
+        try {
+          const repOwner = await User.findOne({ name: new RegExp(`^${reply.user_name}$`, 'i') });
+          if (repOwner && repOwner.email) {
+            await createNotification({
+              recipient_email: repOwner.email,
+              sender_name: user_name || 'Một thành viên',
+              sender_avatar: user_avatar,
+              type: 'like',
+              title: `${user_name || 'Một thành viên'} đã thích phản hồi của bạn`,
+              content: reply.content && reply.content.length > 50 ? reply.content.substring(0, 50) + '...' : (reply.content || ''),
+              target_id: loc._id
+            });
+          }
+        } catch (notifErr) {
+          console.warn('Lỗi gửi thông báo like reply:', notifErr.message);
+        }
+      }
+    }
+
+    reply.likes_count = reply.liked_by.length;
+    await loc.save();
+
+    res.json({
+      success: true,
+      is_liked,
+      likes_count: reply.likes_count,
+      liked_by: reply.liked_by
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Lỗi xử lý thích phản hồi', details: err.message });
+  }
+});
+
+// =====================================================================
 // 10. API THẢ TIM / BỎ TIM (Lưu trữ đồng bộ trên MongoDB)
 // =====================================================================
 app.post('/api/locations/:id/like', async (req, res) => {

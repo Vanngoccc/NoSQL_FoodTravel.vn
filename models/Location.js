@@ -8,6 +8,7 @@ const replySchema = new mongoose.Schema({
   reply_to: { type: String, default: '' },
   parent_reply_id: { type: String, default: '' },
   likes_count: { type: Number, default: 0 },
+  liked_by: [{ type: String }],
   created_at: { type: Date, default: Date.now }
 });
 
@@ -18,6 +19,8 @@ const reviewSchema = new mongoose.Schema({
   rating: { type: Number, required: true, min: 1, max: 5 },
   content: { type: String, default: 'Đã đánh giá sao' },
   images: [{ type: String }],
+  likes_count: { type: Number, default: 0 },
+  liked_by: [{ type: String }],
   created_at: { type: Date, default: Date.now },
   replies: [replySchema]
 });
