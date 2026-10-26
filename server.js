@@ -779,16 +779,26 @@ app.post('/api/locations/:id/reviews/:reviewId/replies', async (req, res) => {
     const review = loc.reviews.id(reviewId);
     if (!review) return res.status(404).json({ error: 'Không tìm thấy review' });
 
+    // Tự động trích xuất @Tên người được phản hồi (nếu có)
+    let reply_to = '';
+    const mentionMatch = content.match(/^@([^\s,:]+)/);
+    if (mentionMatch) {
+      reply_to = mentionMatch[1].trim();
+    }
+
     const newReply = {
       user_name,
       content,
+      avatar: user_avatar || '',
+      reply_to: reply_to,
+      likes_count: 0,
       created_at: new Date()
     };
 
     review.replies.push(newReply);
     await loc.save();
 
-    // Thông báo cho tác giả bài viết
+    // 1. Thông báo cho tác giả bài viết
     if (loc.author_email && (!user_email || loc.author_email.toLowerCase() !== user_email.toLowerCase())) {
       await createNotification({
         recipient_email: loc.author_email,
@@ -799,6 +809,26 @@ app.post('/api/locations/:id/reviews/:reviewId/replies', async (req, res) => {
         content: content,
         target_id: loc._id
       });
+    }
+
+    // 2. Thông báo cho người được tag @ (nếu có)
+    if (reply_to && reply_to.toLowerCase() !== user_name.toLowerCase()) {
+      try {
+        const taggedUser = await User.findOne({ name: new RegExp(`^${reply_to}$`, 'i') });
+        if (taggedUser && taggedUser.email) {
+          await createNotification({
+            recipient_email: taggedUser.email,
+            sender_name: user_name,
+            sender_avatar: user_avatar,
+            type: 'reply',
+            title: `${user_name} đã nhắc đến bạn trong một bình luận`,
+            content: content,
+            target_id: loc._id
+          });
+        }
+      } catch (notifErr) {
+        console.warn('Lỗi gửi thông báo tag:', notifErr.message);
+      }
     }
 
     res.status(201).json({ message: 'Phản hồi thành công', reply: newReply });

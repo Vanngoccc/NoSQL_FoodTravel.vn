@@ -1,9 +1,12 @@
 const mongoose = require('mongoose');
 
-// 1. Schema cho phản hồi bình luận (Nested Replies)
+// 1. Schema cho phản hồi bình luận (Nested Replies - Phân cấp chuẩn mạng xã hội)
 const replySchema = new mongoose.Schema({
   user_name: { type: String, required: true },
   content: { type: String, required: true },
+  avatar: { type: String, default: '' },
+  reply_to: { type: String, default: '' },
+  likes_count: { type: Number, default: 0 },
   created_at: { type: Date, default: Date.now }
 });
 
