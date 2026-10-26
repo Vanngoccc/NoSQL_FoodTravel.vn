@@ -6,6 +6,7 @@ const replySchema = new mongoose.Schema({
   content: { type: String, required: true },
   avatar: { type: String, default: '' },
   reply_to: { type: String, default: '' },
+  parent_reply_id: { type: String, default: '' },
   likes_count: { type: Number, default: 0 },
   created_at: { type: Date, default: Date.now }
 });

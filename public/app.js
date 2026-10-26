@@ -2476,7 +2476,7 @@ function handleReviewKeydown(event) {
 }
 
 // =====================================================================
-// HÀM HỖ TRỢ BÌNH LUẬN & PHẢN HỒI PHÂN CẤP CHUẨN MẠNG XÃ HỘI (FB-STYLE)
+// HÀM HỖ TRỢ BÌNH LUẬN & PHẢN HỒI PHÂN CẤP CHUẨN FACEBOOK (3 CẤP LỒNG NHAU)
 // =====================================================================
 function formatTimeAgoVi(dateInput) {
   if (!dateInput) return 'Vừa xong';
@@ -2490,22 +2490,27 @@ function formatTimeAgoVi(dateInput) {
   return date.toLocaleDateString('vi-VN');
 }
 
-function formatCommentMentions(text) {
+function formatFacebookMention(text) {
   if (!text) return '';
   const safe = String(text)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
-  return safe.replace(/@([^\s,:]+)/g, '<span class="text-[#FF5422] font-semibold bg-orange-50/90 px-1 py-0.2 rounded hover:underline cursor-pointer" onclick="openUserProfile(\'$1\', \'\', event)">@$1</span>');
+  // Bỏ dấu @ và tô màu xanh Facebook đậm chuẩn y hệt FB
+  return safe.replace(/@([^\s,:]+(?:\s+[^\s,:]+)?)/g, '<span class="text-[#1877F2] font-bold cursor-pointer hover:underline" onclick="openUserProfile(\'$1\', \'\', event)">$1</span>');
 }
 
 function toggleCommentLike(btnEl) {
-  btnEl.classList.toggle('text-[#FF5422]');
+  btnEl.classList.toggle('text-[#1877F2]');
   btnEl.classList.toggle('font-bold');
-  if (btnEl.classList.contains('text-[#FF5422]')) {
-    btnEl.innerHTML = '<i class="fa-solid fa-heart text-[10px] mr-1 text-[#FF5422]"></i>Đã thích';
+  const span = btnEl.querySelector('span');
+  const icon = btnEl.querySelector('i');
+  if (btnEl.classList.contains('text-[#1877F2]')) {
+    if (icon) icon.className = 'fa-solid fa-thumbs-up text-xs text-[#1877F2]';
+    if (span) span.textContent = 'Đã thích';
   } else {
-    btnEl.innerHTML = 'Thích';
+    if (icon) icon.className = 'fa-regular fa-thumbs-up text-xs';
+    if (span) span.textContent = 'Thích';
   }
 }
 
@@ -2532,35 +2537,113 @@ function renderReviewsList(reviews) {
       (activeLocationData.author_email && rev.email && activeLocationData.author_email.toLowerCase() === rev.email.toLowerCase())
     );
 
-    // Render danh sách replies lồng nhau theo hình nhánh cây (Threaded Tree Connector)
-    const repliesHtml = (rev.replies && rev.replies.length > 0) ? `
-      <div class="relative mt-2.5 ml-3 sm:ml-4 pl-4 sm:pl-5 border-l-2 border-slate-200 space-y-2">
-        ${rev.replies.map(rep => {
-          const repAvatar = getConsistentAvatar(rep.user_name, rep.avatar);
-          const isRepAuthor = activeLocationData && activeLocationData.author_name && (activeLocationData.author_name.toLowerCase() === rep.user_name.toLowerCase());
-          return `
-            <div class="relative flex items-start space-x-2 group">
-              <!-- Đường cong chữ L nối từ trục dọc vào avatar phản hồi con (Chuẩn Facebook) -->
-              <div class="absolute -left-4 sm:-left-5 top-3.5 w-3 sm:w-4 h-3 border-b-2 border-slate-200 rounded-bl-xl pointer-events-none"></div>
-              
-              <img src="${repAvatar}" onclick="openUserProfile('${rep.user_name.replace(/'/g, "\\'")}', '', event)" class="w-6 h-6 rounded-full object-cover shrink-0 border border-slate-200 cursor-pointer hover:ring-2 hover:ring-[#FF5422]/50 transition-all" title="Xem trang cá nhân của ${rep.user_name}">
-              <div class="flex-1 min-w-0">
-                <!-- Bong bóng bình luận con (Comment Bubble) -->
-                <div class="inline-block bg-slate-100 hover:bg-slate-200/50 transition-colors px-3 py-1.5 rounded-2xl max-w-full text-slate-800">
-                  <div class="flex items-center space-x-1.5 mb-0.5 flex-wrap">
-                    <span onclick="openUserProfile('${rep.user_name.replace(/'/g, "\\'")}', '', event)" class="text-[11px] font-bold text-slate-900 cursor-pointer hover:underline">${rep.user_name}</span>
-                    ${isRepAuthor ? '<span class="text-[8px] px-1 py-0.2 bg-orange-100 text-[#FF5422] font-bold rounded-full">Tác giả</span>' : ''}
+    // Tổ chức danh sách phản hồi thành cấu trúc cây 3 tầng (Level 2 & Level 3 chuẩn Facebook)
+    const level2Replies = [];
+    const level3ByParent = new Map();
+
+    (rev.replies || []).forEach(rep => {
+      let pId = rep.parent_reply_id || '';
+      if (!pId && rep.content) {
+        // Tự động nhận diện nếu rep trả lời 1 người trong thread
+        const mention = rep.content.match(/^@([^\s,:]+(?:\s+[^\s,:]+)?)/);
+        if (mention) {
+          const matchName = mention[1].trim().toLowerCase();
+          const parentRep = (rev.replies || []).find(p => p !== rep && p.user_name && p.user_name.toLowerCase() === matchName);
+          if (parentRep) {
+            pId = parentRep._id ? parentRep._id.toString() : parentRep.user_name;
+          }
+        }
+      }
+
+      if (pId) {
+        if (!level3ByParent.has(pId)) level3ByParent.set(pId, []);
+        level3ByParent.get(pId).push(rep);
+      } else {
+        level2Replies.push(rep);
+      }
+    });
+
+    // Render Level 2 & Level 3
+    const repliesLevel2Html = level2Replies.length > 0 ? `
+      <div class="relative mt-2.5 ml-4 sm:ml-6 pl-4 sm:pl-5 border-l-2 border-slate-200 space-y-3.5">
+        ${level2Replies.map(rep2 => {
+          const rep2Id = rep2._id ? rep2._id.toString() : rep2.user_name;
+          const rep2Avatar = getConsistentAvatar(rep2.user_name, rep2.avatar);
+          const isRep2Author = activeLocationData && activeLocationData.author_name && (activeLocationData.author_name.toLowerCase() === rep2.user_name.toLowerCase());
+          
+          const childReplies = level3ByParent.get(rep2Id) || level3ByParent.get(rep2.user_name) || [];
+
+          // Render Level 3 lồng sâu thêm 1 cấp (với đường cong L nhánh phụ chuẩn FB)
+          const repliesLevel3Html = childReplies.length > 0 ? `
+            <div class="relative mt-2.5 ml-3 sm:ml-5 pl-4 sm:pl-5 border-l-2 border-slate-200 space-y-3">
+              ${childReplies.map(rep3 => {
+                const rep3Avatar = getConsistentAvatar(rep3.user_name, rep3.avatar);
+                const isRep3Author = activeLocationData && activeLocationData.author_name && (activeLocationData.author_name.toLowerCase() === rep3.user_name.toLowerCase());
+                return `
+                  <div class="relative flex items-start space-x-2.5 group">
+                    <!-- Đường cong móc chữ L Level 3 (như ảnh của bạn) -->
+                    <div class="absolute -left-4 sm:-left-5 top-3.5 w-3 sm:w-4 h-3.5 border-b-2 border-slate-200 rounded-bl-xl pointer-events-none"></div>
+
+                    <img src="${rep3Avatar}" onclick="openUserProfile('${rep3.user_name.replace(/'/g, "\\'")}', '', event)" class="w-7 h-7 rounded-full object-cover shrink-0 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all border border-slate-200">
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-baseline space-x-1.5 flex-wrap">
+                        <span class="font-bold text-slate-900 text-xs cursor-pointer hover:underline" onclick="openUserProfile('${rep3.user_name.replace(/'/g, "\\'")}', '', event)">${rep3.user_name}</span>
+                        ${isRep3Author ? '<span class="text-[8px] px-1 py-0.2 bg-orange-100 text-[#FF5422] font-bold rounded-full">Tác giả</span>' : ''}
+                        <span class="text-slate-400 text-[11px]">· ${formatTimeAgoVi(rep3.created_at)}</span>
+                      </div>
+                      <p class="text-slate-800 text-xs leading-relaxed mt-0.5 break-words">${formatFacebookMention(rep3.content)}</p>
+
+                      <!-- Action bar Level 3 -->
+                      <div class="flex items-center space-x-3 text-[11px] font-semibold text-slate-500 mt-1">
+                        <button onclick="toggleCommentLike(this)" class="hover:underline flex items-center space-x-1 cursor-pointer">
+                          <i class="fa-regular fa-thumbs-up text-[10px]"></i> <span>Thích</span>
+                        </button>
+                        <button onclick="toggleInlineReply('${rev._id}', '${rep3.user_name.replace(/'/g, "\\'")}', '${rep2Id}')" class="hover:underline cursor-pointer">Trả lời</button>
+                        <button class="hover:underline cursor-pointer">Chia sẻ</button>
+                      </div>
+                    </div>
                   </div>
-                  <p class="text-[11px] text-slate-700 leading-relaxed break-words">${formatCommentMentions(rep.content)}</p>
+                `;
+              }).join('')}
+            </div>
+          ` : '';
+
+          return `
+            <div class="relative flex items-start space-x-2.5 group">
+              <!-- Đường cong móc chữ L Level 2 -->
+              <div class="absolute -left-4 sm:-left-5 top-3.5 w-3 sm:w-4 h-3.5 border-b-2 border-slate-200 rounded-bl-xl pointer-events-none"></div>
+
+              <img src="${rep2Avatar}" onclick="openUserProfile('${rep2.user_name.replace(/'/g, "\\'")}', '', event)" class="w-8 h-8 rounded-full object-cover shrink-0 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all border border-slate-200">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-baseline space-x-1.5 flex-wrap">
+                  <span class="font-bold text-slate-900 text-xs sm:text-[13px] cursor-pointer hover:underline" onclick="openUserProfile('${rep2.user_name.replace(/'/g, "\\'")}', '', event)">${rep2.user_name}</span>
+                  ${isRep2Author ? '<span class="text-[8px] px-1 py-0.2 bg-orange-100 text-[#FF5422] font-bold rounded-full">Tác giả</span>' : ''}
+                  <span class="text-slate-400 text-[11px]">· ${formatTimeAgoVi(rep2.created_at)}</span>
+                </div>
+                <p class="text-slate-800 text-xs sm:text-[13px] leading-relaxed mt-0.5 break-words">${formatFacebookMention(rep2.content)}</p>
+
+                <!-- Action bar Level 2 -->
+                <div class="flex items-center space-x-3 text-[11px] font-semibold text-slate-500 mt-1">
+                  <button onclick="toggleCommentLike(this)" class="hover:underline flex items-center space-x-1 cursor-pointer">
+                    <i class="fa-regular fa-thumbs-up text-xs"></i> <span>Thích</span>
+                  </button>
+                  <button onclick="toggleInlineReply('${rev._id}', '${rep2.user_name.replace(/'/g, "\\'")}', '${rep2Id}')" class="hover:underline cursor-pointer">Trả lời</button>
+                  <button class="hover:underline cursor-pointer">Chia sẻ</button>
                 </div>
 
-                <!-- Hàng thao tác dưới bình luận con -->
-                <div class="flex items-center space-x-2.5 text-[10px] font-semibold text-slate-500 ml-2 mt-0.5">
-                  <button onclick="toggleCommentLike(this)" class="hover:underline hover:text-[#FF5422] cursor-pointer transition-colors">Thích</button>
-                  <span class="text-slate-300">·</span>
-                  <button onclick="toggleInlineReply('${rev._id}', '${rep.user_name.replace(/'/g, "\\'")}')" class="hover:underline hover:text-[#FF5422] cursor-pointer transition-colors">Trả lời</button>
-                  <span class="text-slate-300">·</span>
-                  <span class="font-normal text-slate-400">${formatTimeAgoVi(rep.created_at)}</span>
+                <!-- Level 3 lồng nhánh cây bên trong Level 2 -->
+                ${repliesLevel3Html}
+
+                <!-- Khung nhập phản hồi con cho Level 2 -->
+                <div id="replyBox_${rev._id}_${rep2Id}" class="hidden relative mt-2.5 ml-3 sm:ml-5 pl-4 sm:pl-5 border-l-2 border-slate-200">
+                  <div class="absolute -left-4 sm:-left-5 top-3.5 w-3.5 h-3 border-b-2 border-slate-200 rounded-bl-xl pointer-events-none"></div>
+                  <div class="flex items-center space-x-2 bg-slate-100 border border-slate-200 rounded-2xl p-1.5 pr-2 focus-within:bg-white focus-within:border-[#1877F2] focus-within:ring-2 focus-within:ring-[#1877F2]/20 transition-all shadow-xs">
+                    <img src="${currentUserAvatar}" class="w-6 h-6 rounded-full object-cover shrink-0">
+                    <input type="text" id="inlineReplyInput_${rev._id}_${rep2Id}" placeholder="Viết phản hồi cho ${rep2.user_name}..." class="flex-1 bg-transparent text-xs text-slate-800 placeholder-slate-400 outline-none px-1" onkeydown="if(event.key==='Enter') submitInlineReply('${rev._id}', '${rep2Id}', '${rep2.user_name}')">
+                    <button onclick="submitInlineReply('${rev._id}', '${rep2Id}', '${rep2.user_name}')" class="w-7 h-7 rounded-full bg-[#1877F2] hover:bg-blue-600 text-white flex items-center justify-center shrink-0 cursor-pointer shadow-xs transition-all">
+                      <i class="fa-solid fa-paper-plane text-[10px]"></i>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2570,43 +2653,41 @@ function renderReviewsList(reviews) {
     ` : '';
 
     return `
-      <div class="p-3.5 bg-white/95 rounded-2xl border border-slate-100 hover:border-slate-200/80 transition-all shadow-sm space-y-2">
-        <!-- Level 1: Bình luận / Đánh giá gốc -->
+      <div class="py-3 px-3 bg-white/95 rounded-2xl border border-slate-100 hover:border-slate-200/80 transition-all shadow-xs space-y-2">
+        <!-- Level 1: Review gốc -->
         <div class="flex items-start space-x-2.5">
-          <img src="${revAvatar}" onclick="openUserProfile('${rev.user_name.replace(/'/g, "\\'")}', '${(rev.email || '').replace(/'/g, "\\'")}', event)" class="w-8 h-8 rounded-full object-cover shrink-0 border border-slate-200 cursor-pointer hover:ring-2 hover:ring-[#FF5422]/50 transition-all" title="Xem trang cá nhân của ${rev.user_name}">
+          <img src="${revAvatar}" onclick="openUserProfile('${rev.user_name.replace(/'/g, "\\'")}', '${(rev.email || '').replace(/'/g, "\\'")}', event)" class="w-9 h-9 rounded-full object-cover shrink-0 border border-slate-200 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all" title="Xem trang cá nhân của ${rev.user_name}">
           <div class="flex-1 min-w-0">
-            <!-- Bong bóng bình luận chính -->
-            <div class="inline-block bg-slate-100 hover:bg-slate-200/50 transition-colors px-3.5 py-2 rounded-2xl max-w-full">
-              <div class="flex items-center space-x-2 mb-1 flex-wrap">
-                <span onclick="openUserProfile('${rev.user_name.replace(/'/g, "\\'")}', '${(rev.email || '').replace(/'/g, "\\'")}', event)" class="text-xs font-bold text-slate-900 cursor-pointer hover:underline">${rev.user_name}</span>
-                ${isAuthor ? '<span class="text-[9px] px-1.5 py-0.2 bg-orange-100 text-[#FF5422] font-bold rounded-full">Tác giả</span>' : ''}
-                <div class="flex items-center space-x-0.5 text-amber-500 text-[10px] font-bold ml-1">
-                  <span>${rev.rating}</span>
-                  <i class="fa-solid fa-star text-[9px]"></i>
-                </div>
+            <div class="flex items-baseline space-x-2 flex-wrap">
+              <span onclick="openUserProfile('${rev.user_name.replace(/'/g, "\\'")}', '${(rev.email || '').replace(/'/g, "\\'")}', event)" class="text-xs sm:text-[13px] font-bold text-slate-900 cursor-pointer hover:underline">${rev.user_name}</span>
+              ${isAuthor ? '<span class="text-[9px] px-1.5 py-0.2 bg-orange-100 text-[#FF5422] font-bold rounded-full">Tác giả</span>' : ''}
+              <span class="text-slate-400 text-[11px]">· ${formatTimeAgoVi(rev.created_at)}</span>
+              <div class="flex items-center space-x-0.5 text-amber-500 text-[10px] font-bold ml-1">
+                <span>${rev.rating}</span>
+                <i class="fa-solid fa-star text-[9px]"></i>
               </div>
-              <p class="text-xs text-slate-700 leading-relaxed break-words">${formatCommentMentions(rev.content)}</p>
+            </div>
+            <p class="text-xs sm:text-[13px] text-slate-800 leading-relaxed mt-0.5 break-words">${formatFacebookMention(rev.content)}</p>
+
+            <!-- Hàng thao tác Level 1 -->
+            <div class="flex items-center space-x-4 text-xs font-semibold text-slate-500 mt-1">
+              <button onclick="toggleCommentLike(this)" class="hover:underline flex items-center space-x-1 cursor-pointer">
+                <i class="fa-regular fa-thumbs-up text-xs"></i> <span>Thích</span>
+              </button>
+              <button onclick="toggleInlineReply('${rev._id}', '${rev.user_name.replace(/'/g, "\\'")}')" class="hover:underline cursor-pointer">Trả lời</button>
+              <button class="hover:underline cursor-pointer">Chia sẻ</button>
             </div>
 
-            <!-- Hàng thao tác dưới bình luận chính -->
-            <div class="flex items-center space-x-3 text-[11px] font-semibold text-slate-500 ml-2 mt-1">
-              <button onclick="toggleCommentLike(this)" class="hover:underline hover:text-[#FF5422] cursor-pointer transition-colors">Thích</button>
-              <span class="text-slate-300">·</span>
-              <button onclick="toggleInlineReply('${rev._id}', '${rev.user_name.replace(/'/g, "\\'")}')" class="hover:underline hover:text-[#FF5422] cursor-pointer transition-colors">Phản hồi</button>
-              <span class="text-slate-300">·</span>
-              <span class="font-normal text-slate-400 text-[10px]">${formatTimeAgoVi(rev.created_at)}</span>
-            </div>
+            <!-- Level 2 & Level 3 lồng nhau -->
+            ${repliesLevel2Html}
 
-            <!-- Phản hồi phân cấp nhánh cây -->
-            ${repliesHtml}
-
-            <!-- Khung nhập phản hồi nối tiếp trong nhánh cây (Inline Reply Box) -->
-            <div id="replyBox_${rev._id}" class="hidden relative mt-2.5 ml-3 sm:ml-4 pl-4 sm:pl-5 border-l-2 border-slate-200">
-              <div class="absolute -left-4 sm:-left-5 top-3.5 w-3 sm:w-4 h-3 border-b-2 border-slate-200 rounded-bl-xl pointer-events-none"></div>
-              <div class="flex items-center space-x-2 bg-slate-50 border border-slate-200 rounded-2xl p-1.5 pr-2 focus-within:bg-white focus-within:border-[#FF5422] focus-within:ring-2 focus-within:ring-[#FF5422]/20 transition-all shadow-sm">
-                <img src="${currentUserAvatar}" class="w-6 h-6 rounded-full object-cover shrink-0 border border-slate-200">
-                <input type="text" id="inlineReplyInput_${rev._id}" placeholder="Viết phản hồi cho ${rev.user_name}..." class="flex-1 bg-transparent text-xs text-slate-800 placeholder-slate-400 outline-none px-1" onkeydown="if(event.key==='Enter') submitInlineReply('${rev._id}')">
-                <button onclick="submitInlineReply('${rev._id}')" class="w-7 h-7 rounded-full bg-[#FF5422] hover:bg-[#E84615] text-white flex items-center justify-center shrink-0 cursor-pointer shadow-sm transition-all">
+            <!-- Khung nhập phản hồi trực tiếp cho Level 1 -->
+            <div id="replyBox_${rev._id}" class="hidden relative mt-2.5 ml-4 sm:ml-6 pl-4 sm:pl-5 border-l-2 border-slate-200">
+              <div class="absolute -left-4 sm:-left-5 top-3.5 w-3.5 h-3 border-b-2 border-slate-200 rounded-bl-xl pointer-events-none"></div>
+              <div class="flex items-center space-x-2 bg-slate-100 border border-slate-200 rounded-2xl p-1.5 pr-2 focus-within:bg-white focus-within:border-[#1877F2] focus-within:ring-2 focus-within:ring-[#1877F2]/20 transition-all shadow-xs">
+                <img src="${currentUserAvatar}" class="w-6 h-6 rounded-full object-cover shrink-0">
+                <input type="text" id="inlineReplyInput_${rev._id}" placeholder="Viết phản hồi cho ${rev.user_name}..." class="flex-1 bg-transparent text-xs text-slate-800 placeholder-slate-400 outline-none px-1" onkeydown="if(event.key==='Enter') submitInlineReply('${rev._id}', '', '${rev.user_name}')">
+                <button onclick="submitInlineReply('${rev._id}', '', '${rev.user_name}')" class="w-7 h-7 rounded-full bg-[#1877F2] hover:bg-blue-600 text-white flex items-center justify-center shrink-0 cursor-pointer shadow-xs transition-all">
                   <i class="fa-solid fa-paper-plane text-[10px]"></i>
                 </button>
               </div>
@@ -2618,31 +2699,41 @@ function renderReviewsList(reviews) {
   }).join('');
 }
 
-function toggleInlineReply(reviewId, targetUser = '') {
-  const box = document.getElementById(`replyBox_${reviewId}`);
+function toggleInlineReply(reviewId, targetUser = '', parentReplyId = '') {
+  if (!currentUser) {
+    openAuthModal('login');
+    return;
+  }
+  const boxId = parentReplyId ? `replyBox_${reviewId}_${parentReplyId}` : `replyBox_${reviewId}`;
+  const inputId = parentReplyId ? `inlineReplyInput_${reviewId}_${parentReplyId}` : `inlineReplyInput_${reviewId}`;
+
+  const box = document.getElementById(boxId);
   if (!box) return;
   box.classList.remove('hidden');
-  const input = document.getElementById(`inlineReplyInput_${reviewId}`);
+
+  const input = document.getElementById(inputId);
   if (input) {
     if (targetUser) {
       input.value = `@${targetUser} `;
     }
     input.focus();
-    // Đặt con trỏ ở cuối chữ
     const len = input.value.length;
     input.setSelectionRange(len, len);
-    // Cuộn nhẹ để thấy khung nhập nếu đang ở cuối
     box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 }
 
-async function submitInlineReply(reviewId) {
+async function submitInlineReply(reviewId, parentReplyId = '', targetUserName = '') {
   if (!currentUser) {
     openAuthModal('login');
     return;
   }
   if (!activeLocationId) return;
-  const input = document.getElementById(`inlineReplyInput_${reviewId}`);
+
+  const boxId = parentReplyId ? `replyBox_${reviewId}_${parentReplyId}` : `replyBox_${reviewId}`;
+  const inputId = parentReplyId ? `inlineReplyInput_${reviewId}_${parentReplyId}` : `inlineReplyInput_${reviewId}`;
+
+  const input = document.getElementById(inputId);
   if (!input) return;
   const content = input.value.trim();
   if (!content) {
@@ -2662,13 +2753,15 @@ async function submitInlineReply(reviewId) {
         user_name: replyName, 
         content,
         user_avatar: replyAvatar,
-        user_email: replyEmail
+        user_email: replyEmail,
+        reply_to: targetUserName,
+        parent_reply_id: parentReplyId
       })
     });
 
     if (res.ok) {
       input.value = '';
-      const box = document.getElementById(`replyBox_${reviewId}`);
+      const box = document.getElementById(boxId);
       if (box) box.classList.add('hidden');
       // Tải lại chi tiết địa điểm để cập nhật review mới mượt mà
       const locRes = await fetch(`/api/locations/${activeLocationId}`);

@@ -766,7 +766,7 @@ app.post('/api/locations/:id/reviews', async (req, res) => {
 // =====================================================================
 app.post('/api/locations/:id/reviews/:reviewId/replies', async (req, res) => {
   try {
-    const { user_name, content, user_avatar, user_email } = req.body;
+    const { user_name, content, user_avatar, user_email, reply_to: incomingReplyTo, parent_reply_id } = req.body;
     const { id, reviewId } = req.params;
 
     if (!user_name || !content) {
@@ -780,9 +780,9 @@ app.post('/api/locations/:id/reviews/:reviewId/replies', async (req, res) => {
     if (!review) return res.status(404).json({ error: 'Không tìm thấy review' });
 
     // Tự động trích xuất @Tên người được phản hồi (nếu có)
-    let reply_to = '';
-    const mentionMatch = content.match(/^@([^\s,:]+)/);
-    if (mentionMatch) {
+    let reply_to = incomingReplyTo || '';
+    const mentionMatch = content.match(/^@([^\s,:]+(?:\s+[^\s,:]+)?)/);
+    if (!reply_to && mentionMatch) {
       reply_to = mentionMatch[1].trim();
     }
 
@@ -791,6 +791,7 @@ app.post('/api/locations/:id/reviews/:reviewId/replies', async (req, res) => {
       content,
       avatar: user_avatar || '',
       reply_to: reply_to,
+      parent_reply_id: parent_reply_id || '',
       likes_count: 0,
       created_at: new Date()
     };
