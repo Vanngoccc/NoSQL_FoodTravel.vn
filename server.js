@@ -779,7 +779,7 @@ app.post('/api/locations/:id/reviews/:reviewId/replies', async (req, res) => {
     const review = loc.reviews.id(reviewId);
     if (!review) return res.status(404).json({ error: 'Không tìm thấy review' });
 
-    // Tự động trích xuất @Tên người được phản hồi (nếu có)
+    // Trích xuất @Tên người được phản hồi (nếu có)
     let reply_to = incomingReplyTo || '';
     const mentionMatch = content.match(/^@([^\s,:]+(?:\s+[^\s,:]+)?)/);
     if (!reply_to && mentionMatch) {
@@ -791,12 +791,37 @@ app.post('/api/locations/:id/reviews/:reviewId/replies', async (req, res) => {
       content,
       avatar: user_avatar || '',
       reply_to: reply_to,
-      parent_reply_id: parent_reply_id || '',
       likes_count: 0,
+      liked_by: [],
       created_at: new Date()
     };
 
-    review.replies.push(newReply);
+    // Kiểm tra xem có cha không để nhúng trực tiếp vào mảng replies của reply cha
+    let targetParentReply = null;
+    if (parent_reply_id) {
+      targetParentReply = review.replies.id(parent_reply_id);
+      if (!targetParentReply) {
+        targetParentReply = (review.replies || []).find(r => r.user_name && r.user_name.toLowerCase() === parent_reply_id.toLowerCase());
+      }
+    }
+
+    if (!targetParentReply && reply_to) {
+      targetParentReply = (review.replies || []).find(r => r.user_name && r.user_name.toLowerCase() === reply_to.toLowerCase());
+    }
+
+    if (targetParentReply) {
+      // Nhúng thẳng vào biến "replies" BÊN TRONG CỦA PHẢN HỒI CHA
+      if (!Array.isArray(targetParentReply.replies)) {
+        targetParentReply.replies = [];
+      }
+      targetParentReply.replies.push(newReply);
+    } else {
+      // Là phản hồi Level 2 gốc
+      newReply.parent_reply_id = '';
+      newReply.replies = [];
+      review.replies.push(newReply);
+    }
+
     await loc.save();
 
     // 1. Thông báo cho tác giả bài viết
@@ -924,7 +949,19 @@ app.post('/api/locations/:id/reviews/:reviewId/replies/:replyId/like', async (re
     const review = loc.reviews.id(reviewId);
     if (!review) return res.status(404).json({ error: 'Không tìm thấy bình luận' });
 
-    const reply = review.replies.id(replyId);
+    let reply = review.replies.id(replyId);
+    if (!reply) {
+      // Tìm kiếm trong các sub-replies lồng nhau bên trong replies của Level 2
+      for (const r of (review.replies || [])) {
+        if (r.replies && r.replies.id) {
+          const foundSub = r.replies.id(replyId);
+          if (foundSub) {
+            reply = foundSub;
+            break;
+          }
+        }
+      }
+    }
     if (!reply) return res.status(404).json({ error: 'Không tìm thấy phản hồi' });
 
     if (!Array.isArray(reply.liked_by)) reply.liked_by = [];

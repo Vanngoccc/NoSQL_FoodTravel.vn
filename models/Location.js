@@ -1,6 +1,17 @@
 const mongoose = require('mongoose');
 
-// 1. Schema cho phản hồi bình luận (Nested Replies - Phân cấp chuẩn mạng xã hội)
+// 1. Schema cho phản hồi con lồng bên trong (Sub-reply / Level 3 lồng trực tiếp)
+const subReplySchema = new mongoose.Schema({
+  user_name: { type: String, required: true },
+  content: { type: String, required: true },
+  avatar: { type: String, default: '' },
+  reply_to: { type: String, default: '' },
+  likes_count: { type: Number, default: 0 },
+  liked_by: [{ type: String }],
+  created_at: { type: Date, default: Date.now }
+});
+
+// 2. Schema cho phản hồi cấp 2 (Level 2) - Chứa mảng replies lồng bên trong
 const replySchema = new mongoose.Schema({
   user_name: { type: String, required: true },
   content: { type: String, required: true },
@@ -9,10 +20,11 @@ const replySchema = new mongoose.Schema({
   parent_reply_id: { type: String, default: '' },
   likes_count: { type: Number, default: 0 },
   liked_by: [{ type: String }],
-  created_at: { type: Date, default: Date.now }
+  created_at: { type: Date, default: Date.now },
+  replies: [subReplySchema] // Mảng replies con lồng trực tiếp bên trong reply cha
 });
 
-// 2. Schema cho đánh giá lồng nhau (Nested Reviews)
+// 3. Schema cho đánh giá lồng nhau (Level 1 Review)
 const reviewSchema = new mongoose.Schema({
   user_name: { type: String, required: true },
   avatar: { type: String, default: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100' },

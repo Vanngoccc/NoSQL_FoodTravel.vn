@@ -2642,8 +2642,16 @@ function renderReviewsList(reviews) {
     const isRevLiked = isLikedByMe(rev.liked_by);
     const revLikesCount = rev.likes_count || (rev.liked_by ? rev.liked_by.length : 0);
 
-    // Gom tất cả tên xuất hiện trong thread để bắt tag mention chính xác 100%
-    const allThreadNames = [rev.user_name, ...(rev.replies || []).map(r => r.user_name)].filter(Boolean);
+    // Gom tất cả tên xuất hiện trong thread để bắt tag mention chính xác 100% (cả Level 1, 2 và replies lồng bên trong)
+    const allThreadNames = [rev.user_name];
+    (rev.replies || []).forEach(r => {
+      if (r.user_name) allThreadNames.push(r.user_name);
+      if (Array.isArray(r.replies)) {
+        r.replies.forEach(sub => {
+          if (sub && sub.user_name) allThreadNames.push(sub.user_name);
+        });
+      }
+    });
 
     // Tổ chức danh sách phản hồi thành cấu trúc cây 3 tầng (Level 2 & Level 3 chuẩn Facebook)
     const level2Replies = [];
@@ -2681,7 +2689,12 @@ function renderReviewsList(reviews) {
           const isRep2Liked = isLikedByMe(rep2.liked_by);
           const rep2LikesCount = rep2.likes_count || (rep2.liked_by ? rep2.liked_by.length : 0);
           
-          const childReplies = level3ByParent.get(rep2Id) || level3ByParent.get(rep2.user_name) || [];
+          // Lấy các replies con lồng trực tiếp bên trong rep2.replies HOẶC qua map parent_reply_id
+          const childReplies = [
+            ...(Array.isArray(rep2.replies) ? rep2.replies : []),
+            ...(level3ByParent.get(rep2Id) || []),
+            ...(level3ByParent.get(rep2.user_name) || [])
+          ];
 
           // Render Level 3 lồng sâu thêm 1 cấp (với đường cong L nhánh phụ chuẩn FB)
           const repliesLevel3Html = childReplies.length > 0 ? `
